@@ -28,7 +28,6 @@
                 {
                     "id": "git-worktrees",
                     "name": "Git Worktrees",
-                    "when": "scmProvider == git",
                     "type": "tree"
                 }
             ]

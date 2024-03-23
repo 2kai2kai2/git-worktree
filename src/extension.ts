@@ -3,7 +3,9 @@ import { GitExtension } from "./git";
 import { Repo } from "./repo";
 import { readFileUTF8, uriJoinPath } from "./util";
 
-const e = new vscode.EventEmitter<1>();
+export type TreeID = `repository:${string}` | `subworktree:${string}`;
+
+export const updateEvent = new vscode.EventEmitter<TreeID | undefined>();
 const repos: Repo[] = [];
 
 /**
@@ -29,35 +31,64 @@ export function activate(context: vscode.ExtensionContext) {
         throw new Error("idk");
     }
 
-    git_extension.onDidOpenRepository(async (repository) => {
-        const localDotGit = uriJoinPath(repository.rootUri, ".git");
-        const localDotGitStat = await vscode.workspace.fs.stat(localDotGit);
-        if (vscode.FileType.Directory & localDotGitStat.type) {
-            // it is main worktree
-            trackRepo(repository.rootUri, context);
-        } else if (vscode.FileType.File & localDotGitStat.type) {
-            // it is sub-worktree
-            const text = await readFileUTF8(localDotGit);
-
-            const rootDir = /^(?:gitdir\: )(.+)\/\.git\/worktrees\/[^\/]+\n$/.exec(text)?.[1];
-            if (!rootDir) {
-                vscode.window.showErrorMessage("Parsing worktree .git file failed.");
-                throw new Error("idk");
-            }
-
-            trackRepo(localDotGit.with({ path: rootDir }), context);
-        } else {
-            throw new Error(".git should be a file or directory ):");
-        }
-    });
     context.subscriptions.push(
-        vscode.window.registerTreeDataProvider("git-worktrees", {
-            onDidChangeTreeData: e.event,
-            getTreeItem: function (element: unknown): vscode.TreeItem | Thenable<vscode.TreeItem> {
-                throw new Error("Function not implemented.");
+        git_extension.onDidOpenRepository(async (repository) => {
+            const localDotGit = uriJoinPath(repository.rootUri, ".git");
+            const localDotGitStat = await vscode.workspace.fs.stat(localDotGit);
+            if (vscode.FileType.Directory & localDotGitStat.type) {
+                // it is main worktree
+                trackRepo(repository.rootUri, context);
+            } else if (vscode.FileType.File & localDotGitStat.type) {
+                // it is sub-worktree
+                const text = await readFileUTF8(localDotGit);
+
+                const rootDir = /^(?:gitdir\: )(.+)\/\.git\/worktrees\/[^\/]+\n$/.exec(text)?.[1];
+                if (!rootDir) {
+                    vscode.window.showErrorMessage("Parsing worktree .git file failed.");
+                    throw new Error("idk");
+                }
+
+                trackRepo(localDotGit.with({ path: rootDir }), context);
+                updateEvent.fire(undefined);
+            } else {
+                throw new Error(".git should be a file or directory ):");
+            }
+        }),
+        vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
+            onDidChangeTreeData: updateEvent.event,
+            getTreeItem: function (element: TreeID): vscode.TreeItem | Thenable<vscode.TreeItem> {
+                console.log('gettreeitem', element);
+                if (element.startsWith("subworktree:")) {
+                    return new vscode.TreeItem(element);
+                } else if (element.startsWith("repository:")) {
+                    return new vscode.TreeItem("repo", vscode.TreeItemCollapsibleState.Expanded);
+                }
+                console.error("invalid tree item");
+                throw new Error("invalid tree item");
             },
-            getChildren: function (element?: unknown): vscode.ProviderResult<unknown[]> {
-                throw new Error("Function not implemented.");
+            getChildren: function (element?: TreeID): vscode.ProviderResult<TreeID[]> {
+                console.log("getchildren", element);
+                if (!element) {
+                    const re = repos.map((r) => `repository:${r.rootWorktree.toString()}` as const);
+                    return re;
+                } else if (element.startsWith("subworktree:")) {
+                    return [];
+                } else if (element.startsWith("repository:")) {
+                    const repo = repos.find(
+                        (r) => `repository:${r.rootWorktree.toString()}` === element,
+                    );
+                    if (!repo) {
+                        console.error(`This repository does not seem to exist: ${element}`);
+                        return [];
+                    }
+                    const items: `subworktree:${string}`[] = [];
+                    for (const [k, v] of repo.otherWorktrees) {
+                        items.push(`subworktree:${k.toString()}`);
+                    }
+                    console.log(items);
+                    return items;
+                }
+                throw new Error(`Invalid tree item: ${element}`);
             },
         }),
     );
