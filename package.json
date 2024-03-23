@@ -9,7 +9,12 @@
     "categories": [
         "Other"
     ],
-    "activationEvents": [],
+    "activationEvents": [
+        "*"
+    ],
+    "extensionDependencies": [
+        "vscode.git"
+    ],
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
@@ -21,7 +26,7 @@
         "views": {
             "scm": [
                 {
-                    "id": "worktrees",
+                    "id": "git-worktrees",
                     "name": "Git Worktrees",
                     "when": "scmProvider == git",
                     "type": "tree"
