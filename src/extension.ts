@@ -74,8 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
         .getExtension<GitExtension>("vscode.git")
         ?.exports?.getAPI(1);
     if (!git_extension) {
-        vscode.window.showErrorMessage("Failed to get data from the built-in git extension.");
-        throw new Error("idk");
+        throw new Error("Failed to get data from the built-in git extension.");
     }
 
     context.subscriptions.push(
@@ -92,7 +91,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const rootDir = /^gitdir\: (.+)\/\.git\/worktrees\/[^\/]+\n$/.exec(text)?.[1];
                 if (!rootDir) {
                     vscode.window.showErrorMessage("Parsing worktree .git file failed.");
-                    throw new Error("idk");
+                    return;
                 }
 
                 trackRepo(localDotGit.with({ path: rootDir }), context);
@@ -108,7 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
             "git-worktree.add-new-worktree",
             async (treeitem: TreeID) => {
                 if (!treeitem) {
-                    throw new Error("Repository must be specified");
+                    vscode.window.showErrorMessage("Repository must be specified");
                 }
                 let repo = findRepo(treeitem);
                 if (!repo) {
@@ -162,7 +161,7 @@ export function activate(context: vscode.ExtensionContext) {
             "git-worktree.remove-worktree",
             async (treeitem: SubworktreeTreeID) => {
                 if (!isSubworktreeTreeID(treeitem)) {
-                    throw new Error("Valid sub-worktree must be specified");
+                    vscode.window.showErrorMessage("Valid sub-worktree must be specified");
                 }
 
                 const location = findSubworktreeDir(treeitem);
