@@ -1,5 +1,13 @@
 import * as cp from "child_process";
-import * as util from "util";
 
+type ExecuteResult = {
+    error: cp.ExecException | null;
+    stdout: string;
+    stderr: string;
+};
 /** WARNING: this is really powerful. Be careful. Don't get pwned. */
-export const execute = util.promisify(cp.exec);
+export function execute(cmd: string): Promise<ExecuteResult> {
+    return new Promise((res) => {
+        cp.exec(cmd, (error, stdout, stderr) => res({ error, stdout, stderr }));
+    });
+}

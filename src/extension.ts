@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
-import { GitExtension } from "./git";
+import { GitExtension, Ref, RefType } from "./git";
 import { Repo } from "./repo";
 import { readFileUTF8, uriJoinPath } from "./util";
+import { execute } from "./execute";
 
 export type RepositoryTreeID = `repository:${string}`;
 export type SubworktreeTreeID = `subworktree:${string}`;
@@ -102,6 +103,72 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(
             "git-worktree.open-worktree-new-window",
             async (treeitem?: TreeID) => await openTreeItem(treeitem, true),
+        ),
+        vscode.commands.registerCommand(
+            "git-worktree.add-new-worktree",
+            async (treeitem: TreeID) => {
+                if (!treeitem) {
+                    throw new Error("Repository must be specified");
+                }
+                let repo = findRepo(treeitem);
+                if (!repo) {
+                    throw new Error(`Unable to find repository (${treeitem})`);
+                }
+                const gitExtensionRepo = git_extension.getRepository(repo.rootWorktree);
+                if (!gitExtensionRepo) {
+                    throw new Error(
+                        `Failed to get repository data (${repo.rootWorktree.toString()})`,
+                    );
+                }
+                const refs = await gitExtensionRepo.getRefs({});
+
+                const quickpickItems: (vscode.QuickPickItem & { ref?: Ref })[] = [
+                    {
+                        label: "local",
+                        kind: vscode.QuickPickItemKind.Separator,
+                    },
+                    ...refs
+                        .filter((r) => r.type === RefType.Head)
+                        .map<vscode.QuickPickItem & { ref: Ref }>((r) => ({
+                            label: r.name ?? "UNKNOWN NAME",
+                            description: r.commit,
+                            ref: r,
+                        })),
+                ];
+                const ref = (await vscode.window.showQuickPick(quickpickItems))?.ref;
+                if (!ref || !(ref.name || ref.commit)) {
+                    return;
+                }
+                const pickedLocation = await vscode.window.showOpenDialog({
+                    canSelectFiles: false,
+                    canSelectFolders: true,
+                    canSelectMany: false,
+                    title: "Select Worktree Location",
+                    defaultUri: uriJoinPath(repo.rootWorktree, ref.name ?? ""),
+                });
+                if (!pickedLocation) {
+                    return;
+                }
+
+                const command = `(cd ${repo.rootWorktree.path} && ${git_extension.git.path} worktree add ${pickedLocation[0].path} ${ref.name ?? ref.commit})`;
+                const { error, stderr } = await execute(command);
+                if (error) {
+                    vscode.window
+                        .showErrorMessage(
+                            "oopies! that probably didn't work.",
+                            "Show Command Result",
+                        )
+                        .then((v) => {
+                            if (v) {
+                                vscode.workspace.openTextDocument({
+                                    language: "text",
+                                    content: `${command}\n${stderr}`,
+                                });
+                            }
+                        });
+                    return;
+                }
+            },
         ),
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,

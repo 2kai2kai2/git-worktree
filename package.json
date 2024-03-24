@@ -22,6 +22,11 @@
                 "command": "git-worktree.open-worktree-new-window",
                 "title": "Open git worktree in new window",
                 "icon": "$(empty-window)"
+            },
+            {
+                "command": "git-worktree.add-new-worktree",
+                "title": "Create new worktree",
+                "icon": "$(add)"
             }
         ],
         "views": {
@@ -38,6 +43,11 @@
                 {
                     "command": "git-worktree.open-worktree-new-window",
                     "when": "viewItem == git-subworktree || viewItem == git-mainworktree",
+                    "group": "inline"
+                },
+                {
+                    "command": "git-worktree.add-new-worktree",
+                    "when": "viewItem == git-mainworktree",
                     "group": "inline"
                 }
             ]
