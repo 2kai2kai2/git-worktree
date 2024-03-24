@@ -27,6 +27,11 @@
                 "command": "git-worktree.add-new-worktree",
                 "title": "Create new worktree",
                 "icon": "$(add)"
+            },
+            {
+                "command": "git-worktree.remove-worktree",
+                "title": "Remove worktree",
+                "icon": "$(trash)"
             }
         ],
         "views": {
@@ -49,6 +54,10 @@
                     "command": "git-worktree.add-new-worktree",
                     "when": "viewItem == git-mainworktree",
                     "group": "inline"
+                },
+                {
+                    "command": "git-worktree.remove-worktree",
+                    "when": "viewItem == git-subworktree"
                 }
             ]
         }

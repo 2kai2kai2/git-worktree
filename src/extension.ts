@@ -153,19 +153,42 @@ export function activate(context: vscode.ExtensionContext) {
                 const command = `(cd ${repo.rootWorktree.path} && ${git_extension.git.path} worktree add ${pickedLocation[0].path} ${ref.name ?? ref.commit})`;
                 const { error, stderr } = await execute(command);
                 if (error) {
-                    vscode.window
-                        .showErrorMessage(
-                            "oopies! that probably didn't work.",
-                            "Show Command Result",
-                        )
-                        .then((v) => {
-                            if (v) {
-                                vscode.workspace.openTextDocument({
-                                    language: "text",
-                                    content: `${command}\n${stderr}`,
-                                });
-                            }
-                        });
+                    vscode.window.showErrorMessage(stderr);
+                    return;
+                }
+            },
+        ),
+        vscode.commands.registerCommand(
+            "git-worktree.remove-worktree",
+            async (treeitem: SubworktreeTreeID) => {
+                if (!isSubworktreeTreeID(treeitem)) {
+                    throw new Error("Valid sub-worktree must be specified");
+                }
+
+                const location = findSubworktreeDir(treeitem);
+                if (!location) {
+                    throw new Error("Failed to lookup the location of the specified worktree.");
+                }
+                const repo = findRepo(treeitem);
+                if (!repo) {
+                    throw new Error(
+                        "Failed to lookup the repository that this worktree belongs to.",
+                    );
+                }
+
+                const confirm = await vscode.window.showWarningMessage(
+                    "Are you sure you want to remove the worktree? This will delete the directory unless it is dirty or locked.",
+                    "No",
+                    "Yes",
+                );
+                if (confirm !== "Yes") {
+                    return;
+                }
+
+                const command = `(cd ${repo.rootWorktree.path} && ${git_extension.git.path} worktree remove ${location.path})`;
+                const { error, stderr } = await execute(command);
+                if (error) {
+                    vscode.window.showErrorMessage(stderr);
                     return;
                 }
             },
