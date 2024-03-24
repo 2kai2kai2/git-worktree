@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { readFileUTF8, uriJoinPath } from "./util";
 import { updateEvent } from "./extension";
+import { ExecuteResult, execute } from "./execute";
 
 async function worktreeGitdirGetDirectory(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
     const stats = await vscode.workspace.fs.stat(uri);
@@ -125,5 +126,9 @@ export class Repo implements vscode.Disposable {
     dispose() {
         this.subscriptions.forEach((d) => d.dispose());
         this.subscriptions.splice(0, this.subscriptions.length);
+    }
+
+    async executeInRepo(file: string, ...args: string[]): Promise<ExecuteResult> {
+        return await execute(file, args, { cwd: this.rootWorktree.path });
     }
 }

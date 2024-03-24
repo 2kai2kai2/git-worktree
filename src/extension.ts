@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { GitExtension, Ref, RefType } from "./git";
 import { Repo } from "./repo";
 import { readFileUTF8, uriJoinPath } from "./util";
-import { execute } from "./execute";
 
 export type RepositoryTreeID = `repository:${string}`;
 export type SubworktreeTreeID = `subworktree:${string}`;
@@ -149,8 +148,13 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                const command = `(cd ${repo.rootWorktree.path} && ${git_extension.git.path} worktree add ${pickedLocation[0].path} ${ref.name ?? ref.commit})`;
-                const { error, stderr } = await execute(command);
+                const { error, stderr } = await repo.executeInRepo(
+                    git_extension.git.path,
+                    "worktree",
+                    "add",
+                    pickedLocation[0].path,
+                    ref.name ?? ref.commit ?? "",
+                );
                 if (error) {
                     vscode.window.showErrorMessage(stderr);
                     return;
@@ -184,8 +188,12 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                const command = `(cd ${repo.rootWorktree.path} && ${git_extension.git.path} worktree remove ${location.path})`;
-                const { error, stderr } = await execute(command);
+                const { error, stderr } = await repo.executeInRepo(
+                    git_extension.git.path,
+                    "worktree",
+                    "remove",
+                    location.path,
+                );
                 if (error) {
                     vscode.window.showErrorMessage(stderr);
                     return;
@@ -194,7 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
         ),
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,
-            getTreeItem: function (element: TreeID): vscode.TreeItem | Thenable<vscode.TreeItem> {
+            getTreeItem(element: TreeID): vscode.TreeItem {
                 if (isSubworktreeTreeID(element)) {
                     const worktreeName = element.slice(element.lastIndexOf("/") + 1);
                     const treeitem = new vscode.TreeItem(worktreeName);
@@ -213,7 +221,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }
                 throw new Error(`Invalid tree item: ${element}`);
             },
-            getChildren: function (element?: TreeID): vscode.ProviderResult<TreeID[]> {
+            getChildren(element?: TreeID): vscode.ProviderResult<TreeID[]> {
                 if (!element) {
                     return repos.map((r) => `repository:${r.rootWorktree.toString()}` as const);
                 } else if (isSubworktreeTreeID(element)) {
