@@ -20,6 +20,7 @@ function trackRepo(rootDir: vscode.Uri, context: vscode.ExtensionContext) {
     console.log("now tracking:", rootDir.toString(true));
 
     repos.push(new Repo(rootDir, context));
+    updateEvent.fire(undefined);
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -49,7 +50,6 @@ export function activate(context: vscode.ExtensionContext) {
                 }
 
                 trackRepo(localDotGit.with({ path: rootDir }), context);
-                updateEvent.fire(undefined);
             } else {
                 throw new Error(".git should be a file or directory ):");
             }
@@ -57,17 +57,14 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,
             getTreeItem: function (element: TreeID): vscode.TreeItem | Thenable<vscode.TreeItem> {
-                console.log('gettreeitem', element);
                 if (element.startsWith("subworktree:")) {
                     return new vscode.TreeItem(element);
                 } else if (element.startsWith("repository:")) {
                     return new vscode.TreeItem("repo", vscode.TreeItemCollapsibleState.Expanded);
                 }
-                console.error("invalid tree item");
                 throw new Error("invalid tree item");
             },
             getChildren: function (element?: TreeID): vscode.ProviderResult<TreeID[]> {
-                console.log("getchildren", element);
                 if (!element) {
                     const re = repos.map((r) => `repository:${r.rootWorktree.toString()}` as const);
                     return re;
@@ -78,14 +75,12 @@ export function activate(context: vscode.ExtensionContext) {
                         (r) => `repository:${r.rootWorktree.toString()}` === element,
                     );
                     if (!repo) {
-                        console.error(`This repository does not seem to exist: ${element}`);
-                        return [];
+                        throw new Error(`This repository does not seem to exist: ${element}`);
                     }
                     const items: `subworktree:${string}`[] = [];
                     for (const [k, v] of repo.otherWorktrees) {
-                        items.push(`subworktree:${k.toString()}`);
+                        items.push(`subworktree:${k}`);
                     }
-                    console.log(items);
                     return items;
                 }
                 throw new Error(`Invalid tree item: ${element}`);
