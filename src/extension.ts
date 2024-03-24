@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { GitExtension, Ref, RefType } from "./git";
-import { Repo } from "./repo";
+import { Repo, SubWorktreeInfo } from "./repo";
 import { readFileUTF8, uriJoinPath } from "./util";
 
 export type RepositoryTreeID = `repository:${string}`;
@@ -27,7 +27,7 @@ function findRepo(treeid: TreeID): Repo | undefined {
     }
     return undefined;
 }
-function findSubworktreeDir(treeid: SubworktreeTreeID): vscode.Uri | undefined {
+function findSubworktree(treeid: SubworktreeTreeID): SubWorktreeInfo | undefined {
     const uriString = treeid.slice("subworktree:".length);
     for (const repo of repos) {
         const item = repo.otherWorktrees.get(uriString);
@@ -43,7 +43,7 @@ async function openTreeItem(item: TreeID | undefined, newWindow: boolean) {
     if (isRepositoryTreeID(item)) {
         path = vscode.Uri.parse(item.slice("repository:".length));
     } else if (isSubworktreeTreeID(item)) {
-        path = findSubworktreeDir(item);
+        path = findSubworktree(item)?.dir;
     } else {
         // todo: let them pick
     }
@@ -168,7 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
                     vscode.window.showErrorMessage("Valid sub-worktree must be specified");
                 }
 
-                const location = findSubworktreeDir(treeitem);
+                const location = findSubworktree(treeitem)?.dir;
                 if (!location) {
                     throw new Error("Failed to lookup the location of the specified worktree.");
                 }
@@ -202,12 +202,15 @@ export function activate(context: vscode.ExtensionContext) {
         ),
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,
-            getTreeItem(element: TreeID): vscode.TreeItem {
+            async getTreeItem(element: TreeID): Promise<vscode.TreeItem> {
                 if (isSubworktreeTreeID(element)) {
-                    const worktreeName = element.slice(element.lastIndexOf("/") + 1);
-                    const treeitem = new vscode.TreeItem(worktreeName);
+                    const treeitem = new vscode.TreeItem(
+                        findSubworktree(element)?.ref ?? "UNKNOWN REF",
+                    );
                     treeitem.iconPath = new vscode.ThemeIcon("git-branch");
                     treeitem.contextValue = "git-subworktree";
+                    treeitem.description = element.slice(element.lastIndexOf("/") + 1);
+
                     return treeitem;
                 } else if (isRepositoryTreeID(element)) {
                     const repoName = element.slice(element.lastIndexOf("/") + 1);
