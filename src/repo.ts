@@ -5,7 +5,7 @@ import { updateEvent } from "./extension";
 async function worktreeGitdirGetDirectory(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
     const stats = await vscode.workspace.fs.stat(uri);
     if (!(stats.type & vscode.FileType.File)) {
-        return;
+        return undefined;
     }
     const text = await readFileUTF8(uri);
 
@@ -32,10 +32,11 @@ function parseWorktreeInfo(uri: vscode.Uri): undefined | { parent: vscode.Uri; f
     };
 }
 
-export class Repo {
+export class Repo implements vscode.Disposable {
     readonly rootWorktree: vscode.Uri;
     /** The directory `.git/worktrees/<name>` to the worktree location */
     readonly otherWorktrees: Map<string, vscode.Uri>;
+    private readonly subscriptions: vscode.Disposable[] = [];
 
     updateTreeItem() {
         console.log("Triggered repository tree item update");
@@ -69,14 +70,14 @@ export class Repo {
         }
     }
 
-    constructor(root: vscode.Uri, context: vscode.ExtensionContext) {
+    constructor(root: vscode.Uri) {
         this.rootWorktree = root;
         this.otherWorktrees = new Map();
 
         const watcher = vscode.workspace.createFileSystemWatcher(
             new vscode.RelativePattern(root, ".git/worktrees/**"),
         );
-        context.subscriptions.push(
+        this.subscriptions.push(
             watcher,
             watcher.onDidCreate(async (uri) => this.handleUpdateWorktreeInfo(uri)),
             watcher.onDidChange(async (uri) => this.handleUpdateWorktreeInfo(uri)),
@@ -106,5 +107,9 @@ export class Repo {
                     this.handleWorktreeGitdirUpdate(gitdirPath);
                 }
             });
+    }
+    dispose() {
+        this.subscriptions.forEach((d) => d.dispose());
+        this.subscriptions.splice(0, this.subscriptions.length);
     }
 }

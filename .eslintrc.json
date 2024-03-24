@@ -19,7 +19,8 @@
         "eqeqeq": "warn",
         "no-throw-literal": "warn",
         "semi": "off",
-        "no-fallthrough": "warn"
+        "no-fallthrough": "warn",
+        "consistent-return": "warn"
     },
     "ignorePatterns": ["out", "dist", "**/*.d.ts"]
 }
