@@ -8,6 +8,25 @@ export type TreeID = `repository:${string}` | `subworktree:${string}`;
 export const updateEvent = new vscode.EventEmitter<TreeID | undefined>();
 const repos: Repo[] = [];
 
+async function openTreeItem(item: TreeID | undefined, newWindow: boolean) {
+    let path: vscode.Uri | undefined = undefined;
+    if (item?.startsWith("repository:")) {
+        path = vscode.Uri.parse(item.slice("repository:".length));
+    } else if (item?.startsWith("subworktree:")) {
+        const worktreeInfoDir = item.slice("subworktree:".length);
+        for (const repo of repos) {
+            path = repo.otherWorktrees.get(worktreeInfoDir);
+            if (path) {
+                break;
+            }
+        }
+    } else {
+        // todo: let them pick
+    }
+    
+    await vscode.commands.executeCommand("vscode.openFolder", path, { forceNewWindow: newWindow });
+}
+
 /**
  * Starts tracking a repo if it is not already tracked
  * @param rootDir The main directory which contains the `.git` directory
@@ -54,6 +73,10 @@ export function activate(context: vscode.ExtensionContext) {
                 throw new Error(".git should be a file or directory ):");
             }
         }),
+        vscode.commands.registerCommand(
+            "git-worktree.open-worktree-new-window",
+            async (treeitem?: TreeID) => await openTreeItem(treeitem, true),
+        ),
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,
             getTreeItem: function (element: TreeID): vscode.TreeItem | Thenable<vscode.TreeItem> {
@@ -61,6 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
                     const worktreeName = element.slice(element.lastIndexOf("/") + 1);
                     const treeitem = new vscode.TreeItem(worktreeName);
                     treeitem.iconPath = new vscode.ThemeIcon("git-branch");
+                    treeitem.contextValue = "git-subworktree";
                     return treeitem;
                 } else if (element.startsWith("repository:")) {
                     const repoName = element.slice(element.lastIndexOf("/") + 1);
@@ -69,14 +93,14 @@ export function activate(context: vscode.ExtensionContext) {
                         vscode.TreeItemCollapsibleState.Expanded,
                     );
                     treeitem.iconPath = new vscode.ThemeIcon("repo");
+                    treeitem.contextValue = "git-mainworktree";
                     return treeitem;
                 }
                 throw new Error(`Invalid tree item: ${element}`);
             },
             getChildren: function (element?: TreeID): vscode.ProviderResult<TreeID[]> {
                 if (!element) {
-                    const re = repos.map((r) => `repository:${r.rootWorktree.toString()}` as const);
-                    return re;
+                    return repos.map((r) => `repository:${r.rootWorktree.toString()}` as const);
                 } else if (element.startsWith("subworktree:")) {
                     return [];
                 } else if (element.startsWith("repository:")) {
