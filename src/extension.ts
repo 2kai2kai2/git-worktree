@@ -58,11 +58,20 @@ export function activate(context: vscode.ExtensionContext) {
             onDidChangeTreeData: updateEvent.event,
             getTreeItem: function (element: TreeID): vscode.TreeItem | Thenable<vscode.TreeItem> {
                 if (element.startsWith("subworktree:")) {
-                    return new vscode.TreeItem(element);
+                    const worktreeName = element.slice(element.lastIndexOf("/") + 1);
+                    const treeitem = new vscode.TreeItem(worktreeName);
+                    treeitem.iconPath = new vscode.ThemeIcon("git-branch");
+                    return treeitem;
                 } else if (element.startsWith("repository:")) {
-                    return new vscode.TreeItem("repo", vscode.TreeItemCollapsibleState.Expanded);
+                    const repoName = element.slice(element.lastIndexOf("/") + 1);
+                    const treeitem = new vscode.TreeItem(
+                        repoName,
+                        vscode.TreeItemCollapsibleState.Expanded,
+                    );
+                    treeitem.iconPath = new vscode.ThemeIcon("repo");
+                    return treeitem;
                 }
-                throw new Error("invalid tree item");
+                throw new Error(`Invalid tree item: ${element}`);
             },
             getChildren: function (element?: TreeID): vscode.ProviderResult<TreeID[]> {
                 if (!element) {
