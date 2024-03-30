@@ -122,11 +122,33 @@ export function activate(context: vscode.ExtensionContext) {
 
                 const quickpickItems: (vscode.QuickPickItem & { ref?: Ref })[] = [
                     {
-                        label: "local",
+                        label: "Local",
                         kind: vscode.QuickPickItemKind.Separator,
                     },
                     ...refs
                         .filter((r) => r.type === RefType.Head)
+                        .map<vscode.QuickPickItem & { ref: Ref }>((r) => ({
+                            label: r.name ?? "UNKNOWN NAME",
+                            description: r.commit,
+                            ref: r,
+                        })),
+                    {
+                        label: "Remote",
+                        kind: vscode.QuickPickItemKind.Separator,
+                    },
+                    ...refs
+                        .filter((r) => r.type === RefType.RemoteHead)
+                        .map<vscode.QuickPickItem & { ref: Ref }>((r) => ({
+                            label: r.name ?? "UNKNOWN NAME",
+                            description: r.commit,
+                            ref: r,
+                        })),
+                    {
+                        label: "Tags",
+                        kind: vscode.QuickPickItemKind.Separator,
+                    },
+                    ...refs
+                        .filter((r) => r.type === RefType.Tag)
                         .map<vscode.QuickPickItem & { ref: Ref }>((r) => ({
                             label: r.name ?? "UNKNOWN NAME",
                             description: r.commit,
