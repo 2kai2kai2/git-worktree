@@ -4,6 +4,13 @@ All notable changes to the "git-worktree" extension will be documented in this f
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.3]
+
+## Fixed
+
+- All repositories were being called `.git` since we are now pointing at that directory to define a repository
+- An error occuring when initializing in the primary worktree, since `git rev-parse --git-common-dir` will return a relative path in this case. Fixed by enforcing absolute path.
+
 ## [0.0.2]
 
 ### Fixed

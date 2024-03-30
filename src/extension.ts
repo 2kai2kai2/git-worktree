@@ -81,7 +81,7 @@ async function trackRepo(dotgitdir: vscode.Uri, context: vscode.ExtensionContext
     const repo = await Repo.init(dotgitdir);
     repos.push(repo);
     context.subscriptions.push(repo);
-    console.log("Now tracking repository:", dotgitdir.toString(true));
+    logger.info("Now tracking repository:", dotgitdir.toString(true));
     updateEvent.fire(undefined);
 }
 
@@ -105,7 +105,7 @@ export async function activate(context: vscode.ExtensionContext) {
         git_extension.onDidOpenRepository(async (repository) => {
             const { error, stdout, stderr } = await execute(
                 gitExecutable,
-                ["rev-parse", "--git-common-dir"],
+                ["rev-parse", "--path-format=absolute", "--git-common-dir"],
                 { cwd: repository.rootUri.path },
             );
             if (error) {
@@ -304,9 +304,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
                     return treeitem;
                 } else if (isRepositoryTreeID(element)) {
-                    const repoName = element.slice(element.lastIndexOf("/") + 1);
+                    const repoName = /\/([^/]+)\/[^/]+\/?$/.exec(element)?.[1];
                     const treeitem = new vscode.TreeItem(
-                        repoName,
+                        repoName ?? "/",
                         vscode.TreeItemCollapsibleState.Expanded,
                     );
                     treeitem.iconPath = new vscode.ThemeIcon("repo");
@@ -352,7 +352,7 @@ export async function activate(context: vscode.ExtensionContext) {
     for (const repository of git_extension.repositories) {
         const { error, stdout, stderr } = await execute(
             gitExecutable,
-            ["rev-parse", "--git-common-dir"],
+            ["rev-parse", "--path-format=absolute", "--git-common-dir"],
             { cwd: repository.rootUri.path },
         );
         if (error) {
