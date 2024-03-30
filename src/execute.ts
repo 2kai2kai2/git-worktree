@@ -1,5 +1,6 @@
 import * as cp from "child_process";
 import { ObjectEncodingOptions } from "fs";
+import { logger } from "./extension";
 
 export type ExecuteResult = {
     error: cp.ExecFileException | null;
@@ -13,7 +14,14 @@ export function execute(
     options: ObjectEncodingOptions & cp.ExecFileOptions,
 ): Promise<ExecuteResult> {
     return new Promise((res) => {
-        console.log("[EXECUTE]", [file, ...args]);
-        cp.execFile(file, args, options, (error, stdout, stderr) => res({ error, stdout, stderr }));
+        logger.trace("[EXECUTE]", options, [file, ...args]);
+        cp.execFile(file, args, options, (error, stdout, stderr) => {
+            if (error) {
+                logger.warn("[RESULT]", {error, stdout, stderr});
+            } else {
+                logger.trace("[RESULT]", {error, stdout, stderr});
+            }
+            res({ error, stdout, stderr });
+        });
     });
 }

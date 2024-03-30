@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { gitExecutable, updateEvent } from "./extension";
+import { gitExecutable, logger, updateEvent } from "./extension";
 import { ExecuteResult, execute } from "./execute";
 
 export interface BasicWorktreeData {
@@ -31,7 +31,7 @@ export class Repo implements vscode.Disposable {
     private readonly subscriptions: vscode.Disposable[] = [];
 
     updateTreeItem() {
-        console.log("Triggered repository tree item update");
+        logger.info("Triggered repository tree item update", this.dotgitdir.toString());
         updateEvent.fire(`repository:${this.dotgitdir.toString()}`);
     }
 

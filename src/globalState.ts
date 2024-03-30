@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { readFileUTF8, uriJoinPath, writeFileUTF8 } from "./util";
 import assert from "assert";
+import { logger } from "./extension";
 
 interface GlobalStateEventBase {
     type: GlobalStateEvent["type"];
@@ -26,7 +27,7 @@ export class GlobalStateManager
     private async writePins(pins: readonly (string | vscode.Uri)[]) {
         const pinsUri = uriJoinPath(this.uri, "pins");
         await writeFileUTF8(pinsUri, JSON.stringify(pins.map((uri) => uri.toString())));
-        console.log("Updated pins");
+        logger.trace("Wrote new pins");
     }
     isPinned(uri: string | vscode.Uri): boolean {
         return this.latestPins.some((pin) => pin.toString() === uri.toString());
@@ -52,7 +53,7 @@ export class GlobalStateManager
         super();
 
         if (!vscode.workspace.fs.isWritableFileSystem(globalStorageUri.scheme)) {
-            console.warn(
+            logger.warn(
                 "WARNING: Global state file system is not writable. Any changes made by this workspace will be lost.",
             );
         }
@@ -80,13 +81,13 @@ export class GlobalStateManager
 
         await vscode.workspace.fs.createDirectory(ret.uri);
         await ret.updatePins();
-        console.log(
+        logger.info(
             "Initial pins",
             ret.latestPins.map((pin) => pin.toString()),
         );
 
         const watcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(ret.uri, "{pins}"),
+            new vscode.RelativePattern(ret.uri, "{,pins}"),
             true,
             false,
             true,
@@ -102,7 +103,7 @@ export class GlobalStateManager
                             type: "pins_changed",
                             newPins: ret._latestPins,
                         });
-                        console.log(
+                        logger.trace(
                             "Pins changed",
                             ret._latestPins.map((uri) => uri.toString()),
                         );

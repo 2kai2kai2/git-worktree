@@ -3,7 +3,7 @@
     "displayName": "Git Worktree View",
     "publisher": "kaih2o",
     "description": "Integrated git worktree control",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "author": {
         "name": "2kai2kai2"
     },
@@ -27,14 +27,8 @@
     "engines": {
         "vscode": "^1.87.0"
     },
-    "extensionKind": [
-        "workspace"
-    ],
     "categories": [
         "Other"
-    ],
-    "activationEvents": [
-        "*"
     ],
     "extensionDependencies": [
         "vscode.git"

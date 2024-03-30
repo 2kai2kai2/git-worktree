@@ -1,9 +1,10 @@
 import * as vscode from "vscode";
 import { GitExtension, Ref, RefType } from "./git";
 import { BasicWorktreeData, Repo } from "./repo";
-import { readFileUTF8, refDisplayName, uriJoinPath } from "./util";
+import { readFileUTF8, refDisplayName, uriJoinPath, writeFileUTF8 } from "./util";
 import { GlobalStateManager } from "./globalState";
 import assert from "assert";
+import { execute } from "./execute";
 
 /** content is a stringified uri */
 export type RepositoryTreeID = `repository:${string}`;
@@ -59,8 +60,8 @@ async function openTreeItem(item: WorktreeTreeID, newWindow: boolean) {
     });
 }
 
-/** 
- * To avoid race conditions, since it takes a bit to initialize and add a repo, 
+/**
+ * To avoid race conditions, since it takes a bit to initialize and add a repo,
  * all current and upcoming tracked repos dotgitdirs go here
  * Make sure that checking and updating happen synchronously to avoid race conditions
  */
@@ -72,7 +73,7 @@ const trackedRepos: vscode.Uri[] = [];
  */
 async function trackRepo(dotgitdir: vscode.Uri, context: vscode.ExtensionContext) {
     if (trackedRepos.find((v) => v.toString(true) === dotgitdir.toString(true))) {
-        console.log("Skipping duplicate");
+        logger.info("Skipping duplicate");
         return; // this is already tracked
     }
     trackedRepos.push(dotgitdir);
@@ -85,7 +86,11 @@ async function trackRepo(dotgitdir: vscode.Uri, context: vscode.ExtensionContext
 }
 
 export let gitExecutable: string;
+export let logger: vscode.LogOutputChannel;
 export async function activate(context: vscode.ExtensionContext) {
+    logger = vscode.window.createOutputChannel("Git Worktrees View", { log: true });
+    logger.info(" ==== STARTING ==== ");
+
     const git_extension = vscode.extensions
         .getExtension<GitExtension>("vscode.git")
         ?.exports?.getAPI(1);
@@ -98,25 +103,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         git_extension.onDidOpenRepository(async (repository) => {
-            const localDotGit = uriJoinPath(repository.rootUri, ".git");
-            const localDotGitStat = await vscode.workspace.fs.stat(localDotGit);
-            if (vscode.FileType.Directory & localDotGitStat.type) {
-                // it is main worktree
-                await trackRepo(repository.rootUri, context);
-            } else if (vscode.FileType.File & localDotGitStat.type) {
-                // it is sub-worktree
-                const text = await readFileUTF8(localDotGit);
-
-                const rootDir = /^gitdir\: (.+)\/\.git\/worktrees\/[^\/]+\n$/.exec(text)?.[1];
-                if (!rootDir) {
-                    vscode.window.showErrorMessage("Parsing worktree .git file failed.");
-                    return;
-                }
-
-                await trackRepo(localDotGit.with({ path: rootDir }), context);
-            } else {
-                throw new Error(".git should be a file or directory ):");
+            const { error, stdout, stderr } = await execute(
+                gitExecutable,
+                ["rev-parse", "--git-common-dir"],
+                { cwd: repository.rootUri.path },
+            );
+            if (error) {
+                vscode.window.showErrorMessage(stderr);
+                return;
             }
+
+            await trackRepo(repository.rootUri.with({ path: stdout.trim() }), context);
         }),
         vscode.commands.registerCommand(
             "git-worktree.open-worktree-new-window",
@@ -265,6 +262,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 await globalStateManager.removePinned(stringUri);
             },
         ),
+        vscode.commands.registerCommand("git-worktree.remove-all-pins", async () => {
+            await writeFileUTF8(uriJoinPath(context.globalStorageUri, "pins"), "[]");
+        }),
         vscode.commands.registerCommand(
             "git-worktree.fetch-repository",
             async (treeitem: RepositoryTreeID) => {
@@ -280,7 +280,6 @@ export async function activate(context: vscode.ExtensionContext) {
                     },
                     async () => await repo.executeInRepo(git_extension.git.path, "fetch"),
                 );
-                console.log([error, stdout, stderr]);
                 if (error) {
                     vscode.window.showErrorMessage(stderr);
                     return;
@@ -350,9 +349,26 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
     );
 
+    for (const repository of git_extension.repositories) {
+        const { error, stdout, stderr } = await execute(
+            gitExecutable,
+            ["rev-parse", "--git-common-dir"],
+            { cwd: repository.rootUri.path },
+        );
+        if (error) {
+            vscode.window.showErrorMessage(stderr);
+            return;
+        }
+
+        await trackRepo(repository.rootUri.with({ path: stdout.trim() }), context);
+    }
+
     for (const pin of globalStateManager.latestPins) {
         await trackRepo(pin, context);
     }
+    logger.info("Reached the end of activate()");
 }
 
-export function deactivate() {}
+export function deactivate() {
+    logger.info("Deactivating.");
+}
