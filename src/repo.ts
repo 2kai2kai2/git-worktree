@@ -20,7 +20,6 @@ function isValidBasicWorktreeData(item: object): item is BasicWorktreeData {
     return "worktree" in item && "HEAD" in item;
 }
 
-
 export class Repo implements vscode.Disposable {
     /** The location of the .git directory */
     readonly dotgitdir: vscode.Uri;
@@ -65,7 +64,9 @@ export class Repo implements vscode.Disposable {
                 continue;
             }
             if (!isValidBasicWorktreeData(entries)) {
-                throw new Error(`When parsing worktrees, found invalid record: ${JSON.stringify(entries)}`);
+                throw new Error(
+                    `When parsing worktrees, found invalid record: ${JSON.stringify(entries)}`,
+                );
             }
             wt.push(entries);
         }
@@ -94,7 +95,10 @@ export class Repo implements vscode.Disposable {
         this._worktrees = new Map();
 
         const watcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(dotgitdir, "{,*,worktrees{,/*{,/*}},refs/**}"),
+            new vscode.RelativePattern(
+                dotgitdir,
+                "{,/config,/HEAD,/packed-refs,/FETCH_HEAD,worktrees{,/*{,/HEAD}},refs/**}",
+            ),
         );
         this.subscriptions.push(
             watcher,

@@ -59,20 +59,28 @@ async function openTreeItem(item: WorktreeTreeID, newWindow: boolean) {
     });
 }
 
+/** 
+ * To avoid race conditions, since it takes a bit to initialize and add a repo, 
+ * all current and upcoming tracked repos dotgitdirs go here
+ * Make sure that checking and updating happen synchronously to avoid race conditions
+ */
+const trackedRepos: vscode.Uri[] = [];
+
 /**
  * Starts tracking a repo if it is not already tracked
  * @param dotgitdir The '.git' directory for the new repository
  */
 async function trackRepo(dotgitdir: vscode.Uri, context: vscode.ExtensionContext) {
-    if (repos.find((v) => v.dotgitdir.toString(true) === dotgitdir.toString(true))) {
+    if (trackedRepos.find((v) => v.toString(true) === dotgitdir.toString(true))) {
         console.log("Skipping duplicate");
         return; // this is already tracked
     }
-    console.log("Now tracking repository:", dotgitdir.toString(true));
+    trackedRepos.push(dotgitdir);
 
     const repo = await Repo.init(dotgitdir);
     repos.push(repo);
     context.subscriptions.push(repo);
+    console.log("Now tracking repository:", dotgitdir.toString(true));
     updateEvent.fire(undefined);
 }
 
@@ -293,6 +301,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     treeitem.iconPath = new vscode.ThemeIcon("git-branch");
                     treeitem.contextValue = "git-worktree:worktree";
                     treeitem.description = element.slice(element.lastIndexOf("/") + 1);
+                    treeitem.tooltip = worktree?.HEAD ?? worktree?.branch ?? treeitem.description;
 
                     return treeitem;
                 } else if (isRepositoryTreeID(element)) {
