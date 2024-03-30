@@ -1,11 +1,35 @@
 {
-    "name": "git-worktree",
-    "displayName": "git-worktree",
-    "description": "",
+    "name": "worktrees",
+    "displayName": "Git Worktree View",
+    "publisher": "kaih2o",
+    "description": "Integrated git worktree control",
     "version": "0.0.1",
+    "author": {
+        "name": "2kai2kai2"
+    },
+    "license": "GPL-3.0-only",
+    "readme": "README.md",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/2kai2kai2/git-worktree"
+    },
+    "sponsor": {
+        "url": "https://patreon.com/2kai2kai2"
+    },
+    "icon": "images/icon.png",
+    "keywords": [
+        "git",
+        "worktree",
+        "branch",
+        "scm",
+        "source control"
+    ],   
     "engines": {
         "vscode": "^1.87.0"
     },
+    "extensionKind": [
+        "workspace"
+    ],
     "categories": [
         "Other"
     ],

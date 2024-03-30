@@ -16,8 +16,6 @@ This extension only requires the Git extension, which comes pre-packaged with VS
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
-
 ### 0.0.1
 
 Initial release :D
