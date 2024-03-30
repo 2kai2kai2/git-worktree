@@ -249,6 +249,31 @@ export async function activate(context: vscode.ExtensionContext) {
                 await globalStateManager.removePinned(stringUri);
             },
         ),
+        vscode.commands.registerCommand(
+            "git-worktree.fetch-repository",
+            async (treeitem: RepositoryTreeID) => {
+                const repo = findRepo(treeitem);
+                if (!repo) {
+                    vscode.window.showErrorMessage("Valid treeitem repository must be specified");
+                    return;
+                }
+                const { error, stdout, stderr } = await vscode.window.withProgress(
+                    {
+                        location: { viewId: "git-worktrees" },
+                        title: "Running git fetch",
+                    },
+                    async () => await repo.executeInRepo(git_extension.git.path, "fetch"),
+                );
+                console.log([error, stdout, stderr]);
+                if (error) {
+                    vscode.window.showErrorMessage(stderr);
+                    return;
+                } else {
+                    vscode.window.showInformationMessage(stdout);
+                    return;
+                }
+            },
+        ),
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,
             async getTreeItem(element: TreeID): Promise<vscode.TreeItem> {

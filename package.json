@@ -42,6 +42,11 @@
                 "command": "git-worktree.remove-pinned-repository",
                 "title": "Worktrees: Un-pin repository",
                 "icon": "$(pinned)"
+            },
+            {
+                "command": "git-worktree.fetch-repository",
+                "title": "Worktrees: Fetch",
+                "icon": "$(repo-sync)"
             }
         ],
         "views": {
@@ -77,6 +82,11 @@
                 {
                     "command": "git-worktree.remove-pinned-repository",
                     "when": "viewItem == git-repository-pinned",
+                    "group": "inline"
+                },
+                {
+                    "command": "git-worktree.fetch-repository",
+                    "when": "viewItem == git-repository-pinned || viewItem == git-repository-unpinned",
                     "group": "inline"
                 }
             ]
