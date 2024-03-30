@@ -1,37 +1,45 @@
 import * as vscode from "vscode";
 import { GitExtension, Ref, RefType } from "./git";
-import { Repo, SubWorktreeInfo } from "./repo";
-import { readFileUTF8, uriJoinPath } from "./util";
+import { BasicWorktreeData, Repo } from "./repo";
+import { readFileUTF8, refDisplayName, uriJoinPath } from "./util";
 import { GlobalStateManager } from "./globalState";
+import assert from "assert";
 
+/** content is a stringified uri */
 export type RepositoryTreeID = `repository:${string}`;
-export type SubworktreeTreeID = `subworktree:${string}`;
-export type TreeID = RepositoryTreeID | SubworktreeTreeID;
+/** Content is just the file path (if necessary, assume other uri stuff is same as its repository) */
+export type WorktreeTreeID = `worktree:${string}`;
+export type TreeID = RepositoryTreeID | WorktreeTreeID;
 function isRepositoryTreeID(treeid: TreeID | any): treeid is RepositoryTreeID {
     return typeof treeid === "string" && treeid.startsWith("repository:");
 }
-function isSubworktreeTreeID(treeid: TreeID | any): treeid is SubworktreeTreeID {
-    return typeof treeid === "string" && treeid.startsWith("subworktree:");
+function isWorktreeTreeID(treeid: TreeID | any): treeid is WorktreeTreeID {
+    return typeof treeid === "string" && treeid.startsWith("worktree:");
+}
+function repositoryTreeIDToUri(treeid: RepositoryTreeID): vscode.Uri {
+    assert(isRepositoryTreeID(treeid));
+    return vscode.Uri.parse(treeid.slice("repository:".length));
+}
+function worktreeTreeIDToPath(treeid: WorktreeTreeID): string {
+    assert(isWorktreeTreeID(treeid));
+    return treeid.slice("worktree:".length);
 }
 
 export const updateEvent = new vscode.EventEmitter<TreeID | undefined>();
 const repos: Repo[] = [];
 function findRepo(treeid: TreeID): Repo | undefined {
     if (isRepositoryTreeID(treeid)) {
-        return repos.find((r) => treeid === `repository:${r.rootWorktree.toString()}`);
-    } else {
-        for (const repo of repos) {
-            if (repo.otherWorktrees.has(treeid.slice("subworktree:".length))) {
-                return repo;
-            }
-        }
+        return repos.find((r) => treeid === `repository:${r.dotgitdir.toString()}`);
+    } else if (isWorktreeTreeID(treeid)) {
+        const worktreeDir = worktreeTreeIDToPath(treeid);
+        return repos.find((r) => r.worktrees.has(worktreeDir));
     }
-    return undefined;
+    throw new Error(`Unrecognized TreeID: "${treeid}"`);
 }
-function findSubworktree(treeid: SubworktreeTreeID): SubWorktreeInfo | undefined {
-    const uriString = treeid.slice("subworktree:".length);
+function findWorktree(treeid: WorktreeTreeID): BasicWorktreeData | undefined {
+    const worktreePath = worktreeTreeIDToPath(treeid);
     for (const repo of repos) {
-        const item = repo.otherWorktrees.get(uriString);
+        const item = repo.worktrees.get(worktreePath);
         if (item) {
             return item;
         }
@@ -39,36 +47,36 @@ function findSubworktree(treeid: SubworktreeTreeID): SubWorktreeInfo | undefined
     return undefined;
 }
 
-async function openTreeItem(item: TreeID | undefined, newWindow: boolean) {
-    let path: vscode.Uri | undefined = undefined;
-    if (isRepositoryTreeID(item)) {
-        path = vscode.Uri.parse(item.slice("repository:".length));
-    } else if (isSubworktreeTreeID(item)) {
-        path = findSubworktree(item)?.dir;
-    } else {
-        // todo: let them pick
+async function openTreeItem(item: WorktreeTreeID, newWindow: boolean) {
+    const repo = findRepo(item);
+    if (!repo) {
+        throw new Error(`Was unable to find the corresponding repo for tree item "${item}"`);
     }
+    const path = worktreeTreeIDToPath(item);
 
-    await vscode.commands.executeCommand("vscode.openFolder", path, { forceNewWindow: newWindow });
+    await vscode.commands.executeCommand("vscode.openFolder", repo?.dotgitdir.with({ path }), {
+        forceNewWindow: newWindow,
+    });
 }
 
 /**
  * Starts tracking a repo if it is not already tracked
- * @param rootDir The main directory which contains the `.git` directory
+ * @param dotgitdir The '.git' directory for the new repository
  */
-function trackRepo(rootDir: vscode.Uri, context: vscode.ExtensionContext) {
-    if (repos.find((v) => v.rootWorktree.toString(true) === rootDir.toString(true))) {
+async function trackRepo(dotgitdir: vscode.Uri, context: vscode.ExtensionContext) {
+    if (repos.find((v) => v.dotgitdir.toString(true) === dotgitdir.toString(true))) {
         console.log("Skipping duplicate");
         return; // this is already tracked
     }
-    console.log("Now tracking repository:", rootDir.toString(true));
+    console.log("Now tracking repository:", dotgitdir.toString(true));
 
-    const repo = new Repo(rootDir);
+    const repo = await Repo.init(dotgitdir);
     repos.push(repo);
     context.subscriptions.push(repo);
     updateEvent.fire(undefined);
 }
 
+export let gitExecutable: string;
 export async function activate(context: vscode.ExtensionContext) {
     const git_extension = vscode.extensions
         .getExtension<GitExtension>("vscode.git")
@@ -76,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (!git_extension) {
         throw new Error("Failed to get data from the built-in git extension.");
     }
+    gitExecutable = git_extension.git.path;
 
     const globalStateManager = await GlobalStateManager.init(context.globalStorageUri);
 
@@ -85,7 +94,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const localDotGitStat = await vscode.workspace.fs.stat(localDotGit);
             if (vscode.FileType.Directory & localDotGitStat.type) {
                 // it is main worktree
-                trackRepo(repository.rootUri, context);
+                await trackRepo(repository.rootUri, context);
             } else if (vscode.FileType.File & localDotGitStat.type) {
                 // it is sub-worktree
                 const text = await readFileUTF8(localDotGit);
@@ -96,14 +105,18 @@ export async function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                trackRepo(localDotGit.with({ path: rootDir }), context);
+                await trackRepo(localDotGit.with({ path: rootDir }), context);
             } else {
                 throw new Error(".git should be a file or directory ):");
             }
         }),
         vscode.commands.registerCommand(
             "git-worktree.open-worktree-new-window",
-            async (treeitem?: TreeID) => await openTreeItem(treeitem, true),
+            async (treeitem?: TreeID) => {
+                if (isWorktreeTreeID(treeitem)) {
+                    await openTreeItem(treeitem, true);
+                }
+            },
         ),
         vscode.commands.registerCommand(
             "git-worktree.add-new-worktree",
@@ -115,11 +128,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 if (!repo) {
                     throw new Error(`Unable to find repository (${treeitem})`);
                 }
-                const gitExtensionRepo = git_extension.getRepository(repo.rootWorktree);
+                const gitExtensionRepo = git_extension.getRepository(repo.dotgitdir);
                 if (!gitExtensionRepo) {
-                    throw new Error(
-                        `Failed to get repository data (${repo.rootWorktree.toString()})`,
-                    );
+                    throw new Error(`Failed to get repository data (${repo.dotgitdir.toString()})`);
                 }
                 const refs = await gitExtensionRepo.getRefs({});
 
@@ -167,7 +178,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     canSelectFolders: true,
                     canSelectMany: false,
                     title: "Select Worktree Location",
-                    defaultUri: uriJoinPath(repo.rootWorktree, ref.name ?? ""),
+                    defaultUri: uriJoinPath(repo.dotgitdir, "..", ref.name ?? ""),
                 });
                 if (!pickedLocation) {
                     return;
@@ -188,15 +199,12 @@ export async function activate(context: vscode.ExtensionContext) {
         ),
         vscode.commands.registerCommand(
             "git-worktree.remove-worktree",
-            async (treeitem: SubworktreeTreeID) => {
-                if (!isSubworktreeTreeID(treeitem)) {
-                    vscode.window.showErrorMessage("Valid sub-worktree must be specified");
+            async (treeitem: WorktreeTreeID) => {
+                if (!isWorktreeTreeID(treeitem)) {
+                    vscode.window.showErrorMessage("Valid worktree must be specified");
                 }
 
-                const location = findSubworktree(treeitem)?.dir;
-                if (!location) {
-                    throw new Error("Failed to lookup the location of the specified worktree.");
-                }
+                const worktreeDir = worktreeTreeIDToPath(treeitem);
                 const repo = findRepo(treeitem);
                 if (!repo) {
                     throw new Error(
@@ -217,7 +225,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     git_extension.git.path,
                     "worktree",
                     "remove",
-                    location.path,
+                    worktreeDir,
                 );
                 if (error) {
                     vscode.window.showErrorMessage(stderr);
@@ -277,12 +285,13 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,
             async getTreeItem(element: TreeID): Promise<vscode.TreeItem> {
-                if (isSubworktreeTreeID(element)) {
+                if (isWorktreeTreeID(element)) {
+                    const worktree = findWorktree(element);
                     const treeitem = new vscode.TreeItem(
-                        findSubworktree(element)?.ref ?? "UNKNOWN REF",
+                        refDisplayName(worktree?.branch ?? worktree?.HEAD ?? "ERROR: NO DATA"),
                     );
                     treeitem.iconPath = new vscode.ThemeIcon("git-branch");
-                    treeitem.contextValue = "git-subworktree";
+                    treeitem.contextValue = "git-worktree:worktree";
                     treeitem.description = element.slice(element.lastIndexOf("/") + 1);
 
                     return treeitem;
@@ -295,25 +304,27 @@ export async function activate(context: vscode.ExtensionContext) {
                     treeitem.iconPath = new vscode.ThemeIcon("repo");
                     const stringUri = element.slice("repository:".length);
                     treeitem.contextValue = globalStateManager.isPinned(stringUri)
-                        ? "git-repository-pinned"
-                        : "git-repository-unpinned";
+                        ? "git-worktree:repo-pinned"
+                        : "git-worktree:repo-unpinned";
                     return treeitem;
                 }
                 throw new Error(`Invalid tree item: ${element}`);
             },
             getChildren(element?: TreeID): vscode.ProviderResult<TreeID[]> {
                 if (!element) {
-                    return repos.map((r) => `repository:${r.rootWorktree.toString()}` as const);
-                } else if (isSubworktreeTreeID(element)) {
+                    return repos.map((r) => `repository:${r.dotgitdir.toString()}` as const);
+                } else if (isWorktreeTreeID(element)) {
                     return [];
                 } else if (isRepositoryTreeID(element)) {
                     const repo = findRepo(element);
                     if (!repo) {
                         throw new Error(`This repository does not seem to exist: ${element}`);
                     }
-                    const items: SubworktreeTreeID[] = [];
-                    for (const [k, v] of repo.otherWorktrees) {
-                        items.push(`subworktree:${k}`);
+                    const items: WorktreeTreeID[] = [];
+                    for (const [k, v] of repo.worktrees) {
+                        if (v.HEAD) {
+                            items.push(`worktree:${k}`);
+                        }
                     }
                     return items;
                 }
@@ -324,14 +335,14 @@ export async function activate(context: vscode.ExtensionContext) {
         globalStateManager.event((ev) => {
             switch (ev.type) {
                 case "pins_changed":
-                    ev.newPins.forEach((pin) => trackRepo(pin, context));
+                    ev.newPins.forEach(async (pin) => await trackRepo(pin, context));
                     updateEvent.fire(undefined);
             }
         }),
     );
 
     for (const pin of globalStateManager.latestPins) {
-        trackRepo(pin, context);
+        await trackRepo(pin, context);
     }
 }
 

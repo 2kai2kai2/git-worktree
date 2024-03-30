@@ -1,68 +1,75 @@
 import * as vscode from "vscode";
-import { readFileUTF8, uriJoinPath } from "./util";
-import { updateEvent } from "./extension";
+import { gitExecutable, updateEvent } from "./extension";
 import { ExecuteResult, execute } from "./execute";
-import { Ref, RefType } from "./git";
 
-async function parseGitdirFile(uri: vscode.Uri): Promise<vscode.Uri | undefined> {
-    const stats = await vscode.workspace.fs.stat(uri);
-    if (!(stats.type & vscode.FileType.File)) {
-        return undefined;
-    }
-
-    const text = await readFileUTF8(uri);
-
-    const regex = new RegExp(/^(.+)\/\.git\n$/);
-    const path = regex.exec(text)?.[1];
-    if (!path) {
-        return undefined;
-    }
-    return uri.with({ path });
+export interface BasicWorktreeData {
+    /** The location of the worktree (e.g. `/myprojects/supercoolproject/worktree1`) */
+    worktree: string;
+    /** The hash of the current HEAD of the worktree. If there is no head, this worktree should be bare, and does not need to be displayed. */
+    HEAD?: string;
+    /** Should exist if HEAD is not present. */
+    bare?: string;
+    /** The current branch of the worktree, or undefined if detached */
+    branch?: string;
+    /** If undefined, it is not locked. If it is a string, it contains the reason (or empty string if unspecified) */
+    locked?: string;
+    /** If undefined, it is not prunable. If it is a string, it contains the reason (or empty string if unspecified) */
+    prunable?: string;
+}
+function isValidBasicWorktreeData(item: object): item is BasicWorktreeData {
+    return "worktree" in item && "HEAD" in item;
 }
 
-async function parseWorktreeHEADReadable(uri: vscode.Uri): Promise<string | undefined> {
-    const stats = await vscode.workspace.fs.stat(uri);
-    if (!(stats.type & vscode.FileType.File)) {
-        return undefined;
-    }
-
-    const text = await readFileUTF8(uri);
-    const match = /^ref: \/?refs\/[^/]+\/(.+)\s*$/.exec(text);
-    if (match) {
-        return match[1];
-    }
-    return text.trim();
-}
-
-/**
- * @param uri The uri of the file `<**>/.git/worktrees/<dir>/<**>`
- * @returns `"<**>/.git/worktrees/<dir>"`
- */
-function parseWorktreeInfoDir(uri: vscode.Uri): undefined | vscode.Uri {
-    const split = /^(.*\/\.git\/worktrees\/[^/\s]+)/.exec(uri.path);
-    if (!split) {
-        return undefined;
-    }
-
-    return uri.with({ path: split[1] });
-}
-
-export interface SubWorktreeInfo {
-    /** The location of the worktree (from `.git/worktrees/<*>/gitdir`, without `.git` at the end of the path) */
-    dir: vscode.Uri;
-    /** The branch/tag/commit that the worktree is on */
-    ref: string;
-}
 
 export class Repo implements vscode.Disposable {
-    readonly rootWorktree: vscode.Uri;
+    /** The location of the .git directory */
+    readonly dotgitdir: vscode.Uri;
     /** The directory `.git/worktrees/<name>` to the worktree location */
-    readonly otherWorktrees: Map<string, SubWorktreeInfo>;
+    private _worktrees: Map<string, BasicWorktreeData>;
+    get worktrees(): ReadonlyMap<string, BasicWorktreeData> {
+        return this._worktrees;
+    }
     private readonly subscriptions: vscode.Disposable[] = [];
 
     updateTreeItem() {
         console.log("Triggered repository tree item update");
-        updateEvent.fire(`repository:${this.rootWorktree.toString()}`);
+        updateEvent.fire(`repository:${this.dotgitdir.toString()}`);
+    }
+
+    private async getBasicWorktreeData(): Promise<BasicWorktreeData[]> {
+        const { error, stdout, stderr } = await this.executeInRepo(
+            gitExecutable,
+            "worktree",
+            "list",
+            "--porcelain",
+            "-z",
+        );
+        if (error) {
+            throw new Error(stderr);
+        }
+
+        const worktreeRecords = stdout.split("\0\0").filter((v) => v.length > 0);
+        const wt: BasicWorktreeData[] = [];
+        for (const record of worktreeRecords) {
+            const items = record.split("\0");
+            const entries: Record<string, string> = {};
+            for (const item of items) {
+                const spaceIndex = item.indexOf(" ");
+                if (spaceIndex < 0) {
+                    entries[item] = "";
+                } else {
+                    entries[item.slice(0, spaceIndex)] = item.slice(spaceIndex + 1);
+                }
+            }
+            if ("bare" in entries) {
+                continue;
+            }
+            if (!isValidBasicWorktreeData(entries)) {
+                throw new Error(`When parsing worktrees, found invalid record: ${JSON.stringify(entries)}`);
+            }
+            wt.push(entries);
+        }
+        return wt;
     }
 
     /**
@@ -70,88 +77,48 @@ export class Repo implements vscode.Disposable {
      * @param uri Should be in `${rootWorktree}/.git/**`
      */
     async handleUpdateWorktreeInfo(uri: vscode.Uri) {
-        const infoDir = parseWorktreeInfoDir(uri);
-        if (!infoDir || infoDir.scheme !== "file") {
-            return;
-        }
-        const dir = await parseGitdirFile(uriJoinPath(infoDir, "gitdir"));
-        if (!dir) {
-            console.error("Found invalid content for `gitdir` file in", infoDir.toString());
-            return;
-        }
-        const ref = await parseWorktreeHEADReadable(uriJoinPath(infoDir, "HEAD"));
-        if (!ref) {
-            console.error("Was unable to read `HEAD` file in", infoDir.toString());
+        if (uri.scheme !== "file") {
             return;
         }
 
-        this.otherWorktrees.set(infoDir.toString(), { dir, ref });
-        console.log("Updated worktree location at", dir.toString());
+        const newWorktrees = await this.getBasicWorktreeData();
+        this._worktrees = new Map();
+        for (const wt of newWorktrees) {
+            this._worktrees.set(wt.worktree, wt);
+        }
         this.updateTreeItem();
     }
 
-    constructor(root: vscode.Uri) {
-        this.rootWorktree = root;
-        this.otherWorktrees = new Map();
+    constructor(dotgitdir: vscode.Uri) {
+        this.dotgitdir = dotgitdir;
+        this._worktrees = new Map();
 
         const watcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(root, ".git/**"),
+            new vscode.RelativePattern(dotgitdir, "{,*,worktrees{,/*{,/*}},refs/**}"),
         );
         this.subscriptions.push(
             watcher,
-            watcher.onDidCreate(async (uri) => this.handleUpdateWorktreeInfo(uri)),
-            watcher.onDidChange(async (uri) => this.handleUpdateWorktreeInfo(uri)),
-            watcher.onDidDelete((e) => {
-                if (e.scheme !== "file") {
-                    return;
-                } else if (
-                    e.toString() === uriJoinPath(this.rootWorktree, ".git/worktrees").toString()
-                ) {
-                    this.otherWorktrees.clear();
-                    console.log("All sub-worktrees deleted for", this.rootWorktree.toString());
-                } else {
-                    const current = this.otherWorktrees.get(e.toString());
-                    if (current && this.otherWorktrees.delete(e.toString())) {
-                        console.log("Deleted worktree: ", current.toString());
-                    }
-                }
-                this.updateTreeItem();
-            }),
+            watcher.onDidCreate(async (uri) => await this.handleUpdateWorktreeInfo(uri)),
+            watcher.onDidChange(async (uri) => await this.handleUpdateWorktreeInfo(uri)),
+            watcher.onDidDelete(async (uri) => await this.handleUpdateWorktreeInfo(uri)),
         );
-
-        // load initial
-        const a = async () => {
-            const gitDir = uriJoinPath(this.rootWorktree, ".git");
-            const gitDirContents = await vscode.workspace.fs.readDirectory(gitDir);
-            if (
-                !gitDirContents.find(
-                    ([name, filetype]) =>
-                        name === "worktrees" && filetype & vscode.FileType.Directory,
-                )
-            ) {
-                return;
-            }
-
-            const worktreesDir = uriJoinPath(this.rootWorktree, ".git/worktrees");
-            const worktreesDirContents = await vscode.workspace.fs.readDirectory(worktreesDir);
-            console.log("Found sub-worktrees info: ", worktreesDirContents);
-            for (const [dir, dirType] of worktreesDirContents) {
-                if (!(dirType & vscode.FileType.Directory)) {
-                    continue;
-                }
-
-                const worktreeInfoPath = uriJoinPath(this.rootWorktree, ".git/worktrees", dir);
-                this.handleUpdateWorktreeInfo(worktreeInfoPath);
-            }
-        };
-        a();
     }
+
+    static async init(dotgitdir: vscode.Uri): Promise<Repo> {
+        const ret = new Repo(dotgitdir);
+        const worktrees = await ret.getBasicWorktreeData();
+        for (const worktree of worktrees) {
+            ret._worktrees.set(worktree.worktree, worktree);
+        }
+        return ret;
+    }
+
     dispose() {
         this.subscriptions.forEach((d) => d.dispose());
         this.subscriptions.splice(0, this.subscriptions.length);
     }
 
     async executeInRepo(file: string, ...args: string[]): Promise<ExecuteResult> {
-        return await execute(file, args, { cwd: this.rootWorktree.path });
+        return await execute(file, args, { cwd: this.dotgitdir.path });
     }
 }

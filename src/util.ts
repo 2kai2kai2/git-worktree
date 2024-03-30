@@ -13,3 +13,24 @@ export function uriJoinPath(uri: vscode.Uri, ...paths: string[]): vscode.Uri {
         path: path.join(uri.path, ...paths),
     });
 }
+
+/**
+ * Produces a displayable version of a ref or commit hash
+ * 
+ * @example
+ * refOrDisplayName("2a29b70f140b7bbebc42e0c95f3a7e294ae92e6c") === "2a29b70"
+ * refOrDisplayName("refs/")
+ */
+export function refDisplayName(refOrHash: string): string {
+    if (/^[\da-fA-F]{40}$/.test(refOrHash)) {
+        return refOrHash.slice(0, 8);
+    }
+
+    const refMatch = /^\/?refs\/[^/]+\/(.+)$/.exec(refOrHash)?.[1];
+    if (refMatch) {
+        return refMatch;
+    }
+
+    console.warn("Failed to generate a display name for", refOrHash);
+    return refOrHash;
+}
