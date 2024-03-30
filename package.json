@@ -20,18 +20,28 @@
         "commands": [
             {
                 "command": "git-worktree.open-worktree-new-window",
-                "title": "Open git worktree in new window",
+                "title": "Worktrees: Open git worktree in new window",
                 "icon": "$(empty-window)"
             },
             {
                 "command": "git-worktree.add-new-worktree",
-                "title": "Create new worktree",
+                "title": "Worktrees: Create new worktree",
                 "icon": "$(add)"
             },
             {
                 "command": "git-worktree.remove-worktree",
-                "title": "Remove worktree",
+                "title": "Worktrees: Remove worktree",
                 "icon": "$(trash)"
+            },
+            {
+                "command": "git-worktree.add-pinned-repository",
+                "title": "Worktrees: Pin repository",
+                "icon": "$(pin)"
+            },
+            {
+                "command": "git-worktree.remove-pinned-repository",
+                "title": "Worktrees: Un-pin repository",
+                "icon": "$(pinned)"
             }
         ],
         "views": {
@@ -47,17 +57,27 @@
             "view/item/context": [
                 {
                     "command": "git-worktree.open-worktree-new-window",
-                    "when": "viewItem == git-subworktree || viewItem == git-mainworktree",
+                    "when": "viewItem == git-subworktree || viewItem == git-repository-pinned || viewItem == git-repository-unpinned",
                     "group": "inline"
                 },
                 {
                     "command": "git-worktree.add-new-worktree",
-                    "when": "viewItem == git-mainworktree",
+                    "when": "viewItem == git-repository-pinned || viewItem == git-repository-unpinned",
                     "group": "inline"
                 },
                 {
                     "command": "git-worktree.remove-worktree",
                     "when": "viewItem == git-subworktree"
+                },
+                {
+                    "command": "git-worktree.add-pinned-repository",
+                    "when": "viewItem == git-repository-unpinned",
+                    "group": "inline"
+                },
+                {
+                    "command": "git-worktree.remove-pinned-repository",
+                    "when": "viewItem == git-repository-pinned",
+                    "group": "inline"
                 }
             ]
         }

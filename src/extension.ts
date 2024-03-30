@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { GitExtension, Ref, RefType } from "./git";
 import { Repo, SubWorktreeInfo } from "./repo";
 import { readFileUTF8, uriJoinPath } from "./util";
+import { GlobalStateManager } from "./globalState";
 
 export type RepositoryTreeID = `repository:${string}`;
 export type SubworktreeTreeID = `subworktree:${string}`;
@@ -68,13 +69,15 @@ function trackRepo(rootDir: vscode.Uri, context: vscode.ExtensionContext) {
     updateEvent.fire(undefined);
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     const git_extension = vscode.extensions
         .getExtension<GitExtension>("vscode.git")
         ?.exports?.getAPI(1);
     if (!git_extension) {
         throw new Error("Failed to get data from the built-in git extension.");
     }
+
+    const globalStateManager = await GlobalStateManager.init(context.globalStorageUri);
 
     context.subscriptions.push(
         git_extension.onDidOpenRepository(async (repository) => {
@@ -222,6 +225,30 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             },
         ),
+        vscode.commands.registerCommand(
+            "git-worktree.add-pinned-repository",
+            async (treeitem: RepositoryTreeID) => {
+                if (!isRepositoryTreeID(treeitem)) {
+                    vscode.window.showErrorMessage("Valid treeitem repository must be specified");
+                    return;
+                }
+
+                const stringUri = treeitem.slice("repository:".length);
+                await globalStateManager.addPinned(stringUri);
+            },
+        ),
+        vscode.commands.registerCommand(
+            "git-worktree.remove-pinned-repository",
+            async (treeitem: RepositoryTreeID) => {
+                if (!isRepositoryTreeID(treeitem)) {
+                    vscode.window.showErrorMessage("Valid treeitem repository must be specified");
+                    return;
+                }
+
+                const stringUri = treeitem.slice("repository:".length);
+                await globalStateManager.removePinned(stringUri);
+            },
+        ),
         vscode.window.registerTreeDataProvider<TreeID>("git-worktrees", {
             onDidChangeTreeData: updateEvent.event,
             async getTreeItem(element: TreeID): Promise<vscode.TreeItem> {
@@ -241,7 +268,10 @@ export function activate(context: vscode.ExtensionContext) {
                         vscode.TreeItemCollapsibleState.Expanded,
                     );
                     treeitem.iconPath = new vscode.ThemeIcon("repo");
-                    treeitem.contextValue = "git-mainworktree";
+                    const stringUri = element.slice("repository:".length);
+                    treeitem.contextValue = globalStateManager.isPinned(stringUri)
+                        ? "git-repository-pinned"
+                        : "git-repository-unpinned";
                     return treeitem;
                 }
                 throw new Error(`Invalid tree item: ${element}`);
@@ -265,7 +295,19 @@ export function activate(context: vscode.ExtensionContext) {
                 throw new Error(`Invalid tree item: ${element}`);
             },
         }),
+        globalStateManager,
+        globalStateManager.event((ev) => {
+            switch (ev.type) {
+                case "pins_changed":
+                    ev.newPins.forEach((pin) => trackRepo(pin, context));
+                    updateEvent.fire(undefined);
+            }
+        }),
     );
+
+    for (const pin of globalStateManager.latestPins) {
+        trackRepo(pin, context);
+    }
 }
 
 export function deactivate() {}
