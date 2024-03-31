@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import { readFileUTF8, uriJoinPath, writeFileUTF8 } from "./util";
-import assert from "assert";
 import { logger } from "./extension";
 
 interface GlobalStateEventBase {
@@ -67,8 +66,9 @@ export class GlobalStateManager
         try {
             const pinsRaw = await readFileUTF8(pinsUri);
             const pinsJson: string[] = JSON.parse(pinsRaw);
-            assert(Array.isArray(pinsJson));
-            pinsJson.forEach((item) => assert(typeof item === "string"));
+            if (!Array.isArray(pinsJson) || !pinsJson.every((item) => typeof item === "string")) {
+                throw new Error(`Invalid type for pins: ${pinsRaw}`);
+            }
             this._latestPins = pinsJson.map((p) => vscode.Uri.parse(p));
         } catch {
             this._latestPins = [];

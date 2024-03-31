@@ -1,5 +1,6 @@
 import path from "path";
 import * as vscode from "vscode";
+import { RepositoryTreeID } from "./extension";
 
 export async function readFileUTF8(uri: vscode.Uri): Promise<string> {
     return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
@@ -33,4 +34,12 @@ export function refDisplayName(refOrHash: string): string {
 
     console.warn("Failed to generate a display name for", refOrHash);
     return refOrHash;
+}
+
+export function repoName(repo: vscode.Uri | RepositoryTreeID): string {
+    if (typeof repo === "string") {
+        return /\/([^/]+)\/[^/]+\/?$/.exec(repo)?.[1] ?? "/";
+    } else {
+        return /\/([^/]+)\/[^/]+\/?$/.exec(repo.path)?.[1] ?? "/";
+    }
 }

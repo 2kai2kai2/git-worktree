@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { GitExtension, Ref, RefType } from "./git";
 import { BasicWorktreeData, Repo } from "./repo";
-import { refDisplayName, uriJoinPath, writeFileUTF8 } from "./util";
+import { refDisplayName, repoName, uriJoinPath, writeFileUTF8 } from "./util";
 import { GlobalStateManager } from "./globalState";
 import assert from "assert";
 import { execute } from "./execute";
@@ -80,6 +80,24 @@ async function pickWorktree(title: string = "Pick Worktree"): Promise<WorktreeTr
     );
     return picked?.worktree;
 }
+async function pickRepository(
+    title: string = "Pick Repository",
+): Promise<RepositoryTreeID | undefined> {
+    const picked = await vscode.window.showQuickPick<
+        vscode.QuickPickItem & { repository: RepositoryTreeID }
+    >(
+        repos.map((repo) => ({
+            repository: `repository:${repo.dotgitdir.toString()}`,
+            label: repoName(repo.dotgitdir),
+            description: repo.dotgitdir.path,
+        })),
+        {
+            canPickMany: false,
+            title,
+        },
+    );
+    return picked?.repository;
+}
 
 /**
  * To avoid race conditions, since it takes a bit to initialize and add a repo,
@@ -146,55 +164,82 @@ export async function activate(context: vscode.ExtensionContext) {
         ),
         vscode.commands.registerCommand("worktrees.add-new-worktree", async (treeitem: TreeID) => {
             if (!treeitem) {
-                vscode.window.showErrorMessage("Repository must be specified");
+                const chosen = await pickRepository();
+                if (!chosen) {
+                    return;
+                }
+                treeitem = chosen;
             }
             let repo = findRepo(treeitem);
             if (!repo) {
-                throw new Error(`Unable to find repository (${treeitem})`);
+                vscode.window.showErrorMessage(`Unable to find repository (${treeitem})`);
+                return;
             }
-            const gitExtensionRepo = git_extension.getRepository(repo.dotgitdir);
-            if (!gitExtensionRepo) {
-                throw new Error(`Failed to get repository data (${repo.dotgitdir.toString()})`);
-            }
-            const refs = await gitExtensionRepo.getRefs({});
 
-            const quickpickItems: (vscode.QuickPickItem & { ref?: Ref })[] = [
+            const {
+                error: showRefErr,
+                stdout: showRefStdout,
+                stderr: showRefStderr,
+            } = await repo.executeInRepo(gitExecutable, "show-ref");
+            if (showRefErr) {
+                throw new Error(showRefStderr);
+            }
+            const refs = showRefStdout
+                .trim()
+                .split("\n")
+                .flatMap((r) => {
+                    if (r.includes("refs/stash")) {
+                        return [];
+                    }
+                    const result = /^([\da-fA-F]{40}) refs\/([^/]+)\/(.*)$/.exec(r.trim());
+                    if (!result) {
+                        logger.warn("Unable to parse ref:", r);
+                        return [];
+                    }
+                    return {
+                        hash: result[1],
+                        type: result[2],
+                        ref: result[3],
+                    } as const;
+                });
+
+            const quickpickItems: (vscode.QuickPickItem & { ref?: string })[] = [
                 {
                     label: "Local",
                     kind: vscode.QuickPickItemKind.Separator,
                 },
                 ...refs
-                    .filter((r) => r.type === RefType.Head)
-                    .map<vscode.QuickPickItem & { ref: Ref }>((r) => ({
-                        label: r.name ?? "UNKNOWN NAME",
-                        description: r.commit,
-                        ref: r,
+                    .filter((r) => r.type === "heads")
+                    .map<vscode.QuickPickItem & { ref: string }>((r) => ({
+                        label: r.ref ?? "UNKNOWN NAME",
+                        description: r.hash,
+                        ref: r.ref,
                     })),
                 {
                     label: "Remote",
                     kind: vscode.QuickPickItemKind.Separator,
                 },
                 ...refs
-                    .filter((r) => r.type === RefType.RemoteHead)
-                    .map<vscode.QuickPickItem & { ref: Ref }>((r) => ({
-                        label: r.name ?? "UNKNOWN NAME",
-                        description: r.commit,
-                        ref: r,
+                    .filter((r) => r.type === "remotes")
+                    .map<vscode.QuickPickItem & { ref: string }>((r) => ({
+                        label: r.ref ?? "UNKNOWN NAME",
+                        description: r.hash,
+                        ref: r.ref,
                     })),
                 {
                     label: "Tags",
                     kind: vscode.QuickPickItemKind.Separator,
                 },
                 ...refs
-                    .filter((r) => r.type === RefType.Tag)
-                    .map<vscode.QuickPickItem & { ref: Ref }>((r) => ({
-                        label: r.name ?? "UNKNOWN NAME",
-                        description: r.commit,
-                        ref: r,
+                    .filter((r) => r.type === "tags")
+                    .map<vscode.QuickPickItem & { ref: string }>((r) => ({
+                        label: r.ref ?? "UNKNOWN NAME",
+                        description: r.hash,
+                        ref: r.ref,
                     })),
             ];
             const ref = (await vscode.window.showQuickPick(quickpickItems))?.ref;
-            if (!ref || !(ref.name || ref.commit)) {
+            if (!ref) {
                 return;
             }
             const pickedLocation = await vscode.window.showOpenDialog({
@@ -202,7 +247,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 canSelectFolders: true,
                 canSelectMany: false,
                 title: "Select Worktree Location",
-                defaultUri: uriJoinPath(repo.dotgitdir, "..", ref.name ?? ""),
+                defaultUri: uriJoinPath(repo.dotgitdir, "..", ref),
             });
             if (!pickedLocation) {
                 return;
@@ -213,18 +258,21 @@ export async function activate(context: vscode.ExtensionContext) {
                 "worktree",
                 "add",
                 pickedLocation[0].path,
-                ref.name ?? ref.commit ?? "",
+                ref,
             );
             if (error) {
-                vscode.window.showErrorMessage(stderr);
-                return;
+                throw new Error(stderr);
             }
         }),
         vscode.commands.registerCommand(
             "worktrees.remove-worktree",
             async (treeitem: WorktreeTreeID) => {
                 if (!isWorktreeTreeID(treeitem)) {
-                    vscode.window.showErrorMessage("Valid worktree must be specified");
+                    const selected = await pickWorktree("Pick Worktree to Remove");
+                    if (!isWorktreeTreeID(selected)) {
+                        return;
+                    }
+                    treeitem = selected;
                 }
 
                 const worktreeDir = worktreeTreeIDToPath(treeitem);
@@ -337,9 +385,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
                     return treeitem;
                 } else if (isRepositoryTreeID(element)) {
-                    const repoName = /\/([^/]+)\/[^/]+\/?$/.exec(element)?.[1];
                     const treeitem = new vscode.TreeItem(
-                        repoName ?? "/",
+                        repoName(element),
                         vscode.TreeItemCollapsibleState.Expanded,
                     );
                     treeitem.iconPath = new vscode.ThemeIcon("repo");
