@@ -37,38 +37,43 @@
     "contributes": {
         "commands": [
             {
-                "command": "git-worktree.open-worktree-new-window",
+                "command": "worktrees.open-worktree-new-window",
                 "title": "Worktrees: Open git worktree in new window",
                 "icon": "$(empty-window)"
             },
             {
-                "command": "git-worktree.add-new-worktree",
+                "command": "worktrees.add-new-worktree",
                 "title": "Worktrees: Create new worktree",
                 "icon": "$(add)"
             },
             {
-                "command": "git-worktree.remove-worktree",
+                "command": "worktrees.remove-worktree",
                 "title": "Worktrees: Remove worktree",
                 "icon": "$(trash)"
             },
             {
-                "command": "git-worktree.add-pinned-repository",
+                "command": "worktrees.add-pinned-repository",
                 "title": "Worktrees: Pin repository",
                 "icon": "$(pin)"
             },
             {
-                "command": "git-worktree.remove-pinned-repository",
+                "command": "worktrees.remove-pinned-repository",
                 "title": "Worktrees: Un-pin repository",
                 "icon": "$(pinned)"
             },
             {
-                "command": "git-worktree.remove-all-pins",
+                "command": "worktrees.remove-all-pins",
                 "title": "Worktrees: Remove all pins"
             },
             {
-                "command": "git-worktree.fetch-repository",
+                "command": "worktrees.fetch-repository",
                 "title": "Worktrees: Fetch",
                 "icon": "$(repo-sync)"
+            },
+            {
+                "command": "worktrees.open-in-integrated-terminal",
+                "title": "Worktrees: Open in Integrated Terminal",
+                "icon": "$(terminal)"
             }
         ],
         "views": {
@@ -83,33 +88,37 @@
         "menus": {
             "view/item/context": [
                 {
-                    "command": "git-worktree.open-worktree-new-window",
-                    "when": "viewItem == git-worktree:worktree",
+                    "command": "worktrees.open-worktree-new-window",
+                    "when": "viewItem == worktrees:worktree",
                     "group": "inline"
                 },
                 {
-                    "command": "git-worktree.add-new-worktree",
-                    "when": "viewItem == git-worktree:repo-pinned || viewItem == git-worktree:repo-unpinned",
+                    "command": "worktrees.add-new-worktree",
+                    "when": "viewItem == worktrees:repo-pinned || viewItem == worktrees:repo-unpinned",
                     "group": "inline"
                 },
                 {
-                    "command": "git-worktree.remove-worktree",
-                    "when": "viewItem == git-worktree:worktree"
+                    "command": "worktrees.remove-worktree",
+                    "when": "viewItem == worktrees:worktree"
                 },
                 {
-                    "command": "git-worktree.add-pinned-repository",
-                    "when": "viewItem == git-worktree:repo-unpinned",
+                    "command": "worktrees.add-pinned-repository",
+                    "when": "viewItem == worktrees:repo-unpinned",
                     "group": "inline"
                 },
                 {
-                    "command": "git-worktree.remove-pinned-repository",
-                    "when": "viewItem == git-worktree:repo-pinned",
+                    "command": "worktrees.remove-pinned-repository",
+                    "when": "viewItem == worktrees:repo-pinned",
                     "group": "inline"
                 },
                 {
-                    "command": "git-worktree.fetch-repository",
-                    "when": "viewItem == git-worktree:repo-pinned || viewItem == git-worktree:repo-unpinned",
+                    "command": "worktrees.fetch-repository",
+                    "when": "viewItem == worktrees:repo-pinned || viewItem == worktrees:repo-unpinned",
                     "group": "inline"
+                },
+                {
+                    "command": "worktrees.open-in-integrated-terminal",
+                    "when": "viewItem == worktrees:worktree"
                 }
             ]
         }

@@ -19,7 +19,7 @@ export function uriJoinPath(uri: vscode.Uri, ...paths: string[]): vscode.Uri {
  * 
  * @example
  * refOrDisplayName("2a29b70f140b7bbebc42e0c95f3a7e294ae92e6c") === "2a29b70"
- * refOrDisplayName("refs/")
+ * refOrDisplayName("refs/heads/main") === "main"
  */
 export function refDisplayName(refOrHash: string): string {
     if (/^[\da-fA-F]{40}$/.test(refOrHash)) {
