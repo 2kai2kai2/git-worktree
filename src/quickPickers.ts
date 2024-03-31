@@ -7,22 +7,25 @@ type pickWorktreeItem = vscode.QuickPickItem & { worktree: WorktreeTreeID };
 export async function pickWorktree(
     title: string = "Pick Worktree",
     filter: (worktree: Readonly<BasicWorktreeData>, repo: Readonly<Repo>) => boolean = () => true,
+    noOptionsMessage: string = "There are no matching worktrees.",
 ): Promise<WorktreeTreeID | undefined> {
-    const picked = await vscode.window.showQuickPick<pickWorktreeItem>(
-        repos.flatMap((repo) =>
-            Array.from(repo.worktrees)
-                .filter(([_, wt]) => filter(wt, repo))
-                .map<pickWorktreeItem>(([_, wt]) => ({
-                    worktree: `worktree:${wt.worktree}`,
-                    label: refDisplayName(wt.branch ?? wt.HEAD ?? "NO NAME"),
-                    description: wt.worktree,
-                })),
-        ),
-        {
-            canPickMany: false,
-            title,
-        },
+    const options: pickWorktreeItem[] = repos.flatMap((repo) =>
+        Array.from(repo.worktrees)
+            .filter(([_, wt]) => filter(wt, repo))
+            .map(([_, wt]) => ({
+                worktree: `worktree:${wt.worktree}`,
+                label: refDisplayName(wt.branch ?? wt.HEAD ?? "NO NAME"),
+                description: wt.worktree,
+            })),
     );
+    if (options.length === 0) {
+        vscode.window.showWarningMessage(noOptionsMessage);
+        return undefined;
+    }
+    const picked = await vscode.window.showQuickPick<pickWorktreeItem>(options, {
+        canPickMany: false,
+        title,
+    });
     return picked?.worktree;
 }
 
@@ -30,18 +33,21 @@ type pickRepositoryItem = vscode.QuickPickItem & { repository: RepositoryTreeID 
 export async function pickRepository(
     title: string = "Pick Repository",
     filter: (repo: Readonly<Repo>) => boolean = () => true,
+    noOptionsMessage: string = "There are no matching repositories.",
 ): Promise<RepositoryTreeID | undefined> {
-    const picked = await vscode.window.showQuickPick<pickRepositoryItem>(
-        repos.filter(filter).map((repo) => ({
-            repository: `repository:${repo.dotgitdir.toString()}`,
-            label: repoName(repo.dotgitdir),
-            description: repo.dotgitdir.path,
-        })),
-        {
-            canPickMany: false,
-            title,
-        },
-    );
+    const options: pickRepositoryItem[] = repos.filter(filter).map((repo) => ({
+        repository: `repository:${repo.dotgitdir.toString()}`,
+        label: repoName(repo.dotgitdir),
+        description: repo.dotgitdir.path,
+    }));
+    if (options.length === 0) {
+        vscode.window.showWarningMessage(noOptionsMessage);
+        return undefined;
+    }
+    const picked = await vscode.window.showQuickPick<pickRepositoryItem>(options, {
+        canPickMany: false,
+        title,
+    });
     return picked?.repository;
 }
 
@@ -59,6 +65,7 @@ export async function pickRef(
     repo: Readonly<Repo>,
     title: string = "Pick Ref",
     filter: (ref: Ref) => boolean = () => true,
+    noOptionsMessage: string = "There are no matching refs.",
 ): Promise<Ref | undefined> {
     const {
         error: showRefErr,
@@ -87,6 +94,10 @@ export async function pickRef(
             } as const;
         })
         .filter(filter);
+    if (refs.length === 0) {
+        vscode.window.showWarningMessage(noOptionsMessage);
+        return undefined;
+    }
 
     const quickpickItems: pickRefItem[] = [
         {
@@ -123,6 +134,6 @@ export async function pickRef(
                 ref: r,
             })),
     ];
-    const result = await vscode.window.showQuickPick(quickpickItems);
+    const result = await vscode.window.showQuickPick(quickpickItems, { canPickMany: false, title });
     return result?.ref!;
 }

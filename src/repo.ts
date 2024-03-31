@@ -15,6 +15,7 @@ export interface BasicWorktreeData {
     locked?: string;
     /** If undefined, it is not prunable. If it is a string, it contains the reason (or empty string if unspecified) */
     prunable?: string;
+    order: number;
 }
 function isValidBasicWorktreeData(item: object): item is BasicWorktreeData {
     return "worktree" in item && "HEAD" in item;
@@ -49,8 +50,8 @@ export class Repo implements vscode.Disposable {
 
         const worktreeRecords = stdout.split("\0\0").filter((v) => v.length > 0);
         const wt: BasicWorktreeData[] = [];
-        for (const record of worktreeRecords) {
-            const items = record.split("\0");
+        for (let i = 0; i < worktreeRecords.length; i++) {
+            const items = worktreeRecords[i].split("\0");
             const entries: Record<string, string> = {};
             for (const item of items) {
                 const spaceIndex = item.indexOf(" ");
@@ -68,6 +69,7 @@ export class Repo implements vscode.Disposable {
                     `When parsing worktrees, found invalid record: ${JSON.stringify(entries)}`,
                 );
             }
+            entries.order = i;
             wt.push(entries);
         }
         return wt;

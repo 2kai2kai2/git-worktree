@@ -118,10 +118,15 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand(
             "worktrees.open-worktree-new-window",
-            async (treeitem?: TreeID) => {
-                if (isWorktreeTreeID(treeitem)) {
-                    await openTreeItem(treeitem, true);
+            async (treeitem?: WorktreeTreeID) => {
+                if (!isWorktreeTreeID(treeitem)) {
+                    const choice = await pickWorktree("Pick Worktree to Open");
+                    if (!isWorktreeTreeID(choice)) {
+                        return;
+                    }
+                    treeitem = choice;
                 }
+                await openTreeItem(treeitem, true);
             },
         ),
         vscode.commands.registerCommand("worktrees.add-new-worktree", async (treeitem: TreeID) => {
@@ -138,7 +143,20 @@ export async function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const ref = await pickRef(repo);
+            const ref = await pickRef(
+                repo,
+                "Pick branch for new worktree",
+                (ref) => {
+                    const fullRef = `refs/${ref.type}/${ref.ref}`;
+                    for (const [, wt] of repo!.worktrees) {
+                        if (wt.branch === fullRef) {
+                            return false;
+                        }
+                    }
+                    return true;
+                },
+                "There are no more branches to make worktrees for! Maybe you want to fetch?",
+            );
             if (!ref) {
                 return;
             }
@@ -168,7 +186,11 @@ export async function activate(context: vscode.ExtensionContext) {
             "worktrees.remove-worktree",
             async (treeitem: WorktreeTreeID) => {
                 if (!isWorktreeTreeID(treeitem)) {
-                    const selected = await pickWorktree("Pick Worktree to Remove");
+                    const selected = await pickWorktree(
+                        "Pick Worktree to Remove",
+                        (wt, repo) => wt.order !== 0,
+                        "There are no worktrees that can be removed.",
+                    );
                     if (!isWorktreeTreeID(selected)) {
                         return;
                     }
@@ -208,8 +230,15 @@ export async function activate(context: vscode.ExtensionContext) {
             "worktrees.add-pinned-repository",
             async (treeitem: RepositoryTreeID) => {
                 if (!isRepositoryTreeID(treeitem)) {
-                    vscode.window.showErrorMessage("Valid treeitem repository must be specified");
-                    return;
+                    const chosen = await pickRepository(
+                        "Pin selected repository",
+                        (repo) => !globalStateManager.isPinned(repo.dotgitdir),
+                        "All repositories are already pinned.",
+                    );
+                    if (!isRepositoryTreeID(chosen)) {
+                        return;
+                    }
+                    treeitem = chosen;
                 }
 
                 const stringUri = treeitem.slice("repository:".length);
@@ -220,8 +249,15 @@ export async function activate(context: vscode.ExtensionContext) {
             "worktrees.remove-pinned-repository",
             async (treeitem: RepositoryTreeID) => {
                 if (!isRepositoryTreeID(treeitem)) {
-                    vscode.window.showErrorMessage("Valid treeitem repository must be specified");
-                    return;
+                    const chosen = await pickRepository(
+                        "Unpin selected repository",
+                        (repo) => globalStateManager.isPinned(repo.dotgitdir),
+                        "There are no pinned repositories.",
+                    );
+                    if (!isRepositoryTreeID(chosen)) {
+                        return;
+                    }
+                    treeitem = chosen;
                 }
 
                 const stringUri = treeitem.slice("repository:".length);
@@ -234,11 +270,23 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(
             "worktrees.fetch-repository",
             async (treeitem: RepositoryTreeID) => {
+                if (!isRepositoryTreeID(treeitem)) {
+                    const chosen = await pickRepository(
+                        "Pin selected repository",
+                        undefined,
+                        "There are no available repositories to fetch.",
+                    );
+                    if (!isRepositoryTreeID(chosen)) {
+                        return;
+                    }
+                    treeitem = chosen;
+                }
                 const repo = findRepo(treeitem);
                 if (!repo) {
-                    vscode.window.showErrorMessage("Valid treeitem repository must be specified");
+                    vscode.window.showErrorMessage("Was unable to find repository.");
                     return;
                 }
+
                 const { error, stdout, stderr } = await vscode.window.withProgress(
                     {
                         location: { viewId: "git-worktrees" },
