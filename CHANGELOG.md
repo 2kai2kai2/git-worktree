@@ -2,7 +2,19 @@
 
 All notable changes to the "git-worktree" extension will be documented in this file.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+<!--Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.-->
+
+## [0.0.4]
+
+### Fixed
+
+- Watchers now accurately determine when git worktree metadata changes
+- Getting refs now works for all git repositories (previously we used the git extension to do this, which only works for in-workspace git directories)
+
+### Added
+
+- Commands can now be used outside of context menus, as they will ask the user to pick their targets.
+- Added "Open in integrated terminal" command and context menu option
 
 ## [0.0.3]
 

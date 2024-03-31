@@ -13,14 +13,3 @@ Additionally, you can pin Git repositories so they will always be available in t
 ## Requirements
 
 This extension only requires the Git extension, which comes pre-packaged with VS Code!
-
-## Release Notes
-
-### 0.0.2
-
-- Fixed a bug that would not load repositories if the Git extension was faster than this one (in production this is always the case since Git is a prerequisite)
-- The remove all pins command actually exists now
-
-### 0.0.1
-
-Initial release :D

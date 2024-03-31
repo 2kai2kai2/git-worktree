@@ -3,7 +3,7 @@
     "displayName": "Git Worktree View",
     "publisher": "kaih2o",
     "description": "Integrated git worktree control",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "author": {
         "name": "2kai2kai2"
     },
@@ -23,7 +23,7 @@
         "branch",
         "scm",
         "source control"
-    ],   
+    ],
     "engines": {
         "vscode": "^1.87.0"
     },
