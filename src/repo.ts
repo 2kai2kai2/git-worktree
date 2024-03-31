@@ -79,6 +79,7 @@ export class Repo implements vscode.Disposable {
      */
     async handleUpdateWorktreeInfo(uri: vscode.Uri) {
         if (uri.scheme !== "file") {
+            logger.warn("Updates on a non-`file://` uri");
             return;
         }
 
@@ -94,12 +95,12 @@ export class Repo implements vscode.Disposable {
         this.dotgitdir = dotgitdir;
         this._worktrees = new Map();
 
-        const watcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(
-                dotgitdir,
-                "{,/config,/HEAD,/packed-refs,/FETCH_HEAD,worktrees{,/*{,/HEAD}},refs/**}",
-            ),
+        const pattern = new vscode.RelativePattern(
+            dotgitdir,
+            "{.,config,HEAD,packed-refs,FETCH_HEAD,worktrees,worktrees/*,worktrees/*/HEAD,refs/**}",
         );
+        const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+        logger.info("Now watching", pattern);
         this.subscriptions.push(
             watcher,
             watcher.onDidCreate(async (uri) => await this.handleUpdateWorktreeInfo(uri)),
@@ -118,6 +119,7 @@ export class Repo implements vscode.Disposable {
     }
 
     dispose() {
+        logger.trace("Disposing of repo");
         this.subscriptions.forEach((d) => d.dispose());
         this.subscriptions.splice(0, this.subscriptions.length);
     }
