@@ -4,7 +4,7 @@ import { BasicWorktreeData, Repo } from "./repo";
 import { refDisplayName, repoName, uriJoinPath, writeFileUTF8 } from "./util";
 import { GlobalStateManager } from "./globalState";
 import assert from "assert";
-import { execute } from "./execute";
+import { cleanPath, execute } from "./execute";
 import { pickRef, pickRepository, pickWorktree } from "./quickPickers";
 
 /** content is a stringified uri */
@@ -56,9 +56,13 @@ async function openTreeItem(item: WorktreeTreeID, newWindow: boolean) {
     }
     const path = worktreeTreeIDToPath(item);
 
-    await vscode.commands.executeCommand("vscode.openFolder", repo?.dotgitdir.with({ path }), {
-        forceNewWindow: newWindow,
-    });
+    await vscode.commands.executeCommand(
+        "vscode.openFolder",
+        repo?.dotgitdir.with({ path: cleanPath(path) }),
+        {
+            forceNewWindow: newWindow,
+        },
+    );
 }
 
 /**
@@ -175,7 +179,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 git_extension.git.path,
                 "worktree",
                 "add",
-                pickedLocation[0].path,
+                cleanPath(pickedLocation[0].path),
                 ref.ref,
             );
             if (error) {
@@ -218,7 +222,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     git_extension.git.path,
                     "worktree",
                     "remove",
-                    worktreeDir,
+                    cleanPath(worktreeDir),
                 );
                 if (error) {
                     vscode.window.showErrorMessage(stderr);
@@ -307,12 +311,14 @@ export async function activate(context: vscode.ExtensionContext) {
             "worktrees.open-in-integrated-terminal",
             async (element?: WorktreeTreeID) => {
                 if (isWorktreeTreeID(element)) {
-                    vscode.window.createTerminal({ cwd: worktreeTreeIDToPath(element) }).show();
+                    vscode.window
+                        .createTerminal({ cwd: cleanPath(worktreeTreeIDToPath(element)) })
+                        .show();
                 } else {
                     const worktree = await pickWorktree();
                     if (worktree) {
                         vscode.window
-                            .createTerminal({ cwd: worktreeTreeIDToPath(worktree) })
+                            .createTerminal({ cwd: cleanPath(worktreeTreeIDToPath(worktree)) })
                             .show();
                     }
                 }

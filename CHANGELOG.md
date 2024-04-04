@@ -4,6 +4,15 @@ All notable changes to the "git-worktree" extension will be documented in this f
 
 <!--Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.-->
 
+## [0.0.5]
+
+The extension now works on Windows!
+
+### Fixed
+
+- A bug on Windows which caused file paths to be incorrect due to inconsistency between `/` and `\`
+- A bug on Windows which caused file paths to be incorrect due to inconsistency in starting slashes
+
 ## [0.0.4]
 
 ### Fixed

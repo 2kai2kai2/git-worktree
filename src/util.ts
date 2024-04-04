@@ -11,13 +11,13 @@ export async function writeFileUTF8(uri: vscode.Uri, text: string) {
 
 export function uriJoinPath(uri: vscode.Uri, ...paths: string[]): vscode.Uri {
     return uri.with({
-        path: path.join(uri.path, ...paths),
+        path: path.posix.join(uri.path, ...paths),
     });
 }
 
 /**
  * Produces a displayable version of a ref or commit hash
- * 
+ *
  * @example
  * refOrDisplayName("2a29b70f140b7bbebc42e0c95f3a7e294ae92e6c") === "2a29b70"
  * refOrDisplayName("refs/heads/main") === "main"
