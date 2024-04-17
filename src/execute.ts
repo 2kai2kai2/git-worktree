@@ -32,12 +32,14 @@ export function execute(
     _options.cwd = _options.cwd ? cleanPath(_options.cwd.toString()) : undefined;
 
     return new Promise((res) => {
-        logger.trace("[EXECUTE]", _options, [_file, ...args]);
+        logger.info(`[${_options.cwd ?? " "}] ${[_file, ...args].join(" ")}`);
         cp.execFile(_file, args, _options, (error, stdout, stderr) => {
+            const printStdout = stdout ? `\n\tSTDOUT: ${stdout}` : "";
+            const printStderr = stderr ? `\n\tSTDERR: ${stderr}` : "";
             if (error) {
-                logger.warn("[RESULT]", { error, stdout, stderr });
+                logger.warn(`[RESULT]\n\tERROR: ${error}${printStdout}${printStderr}`);
             } else {
-                logger.trace("[RESULT]", { error, stdout, stderr });
+                logger.trace(`[RESULT]${printStdout}${printStderr}`);
             }
             res({ error, stdout, stderr });
         });

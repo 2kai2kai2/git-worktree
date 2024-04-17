@@ -43,3 +43,16 @@ export function repoName(repo: vscode.Uri | RepositoryTreeID): string {
         return /\/([^/]+)\/[^/]+\/?$/.exec(repo.path)?.[1] ?? "/";
     }
 }
+
+export async function viewProgress<T>(
+    callback: Promise<T> | Parameters<typeof vscode.window.withProgress<T>>[1],
+    title?: string,
+): Promise<T> {
+    return await vscode.window.withProgress(
+        {
+            location: { viewId: "git-worktrees" },
+            title,
+        },
+        typeof callback === "function" ? callback : async () => await callback,
+    );
+}

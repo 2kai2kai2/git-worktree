@@ -32,7 +32,7 @@ export class Repo implements vscode.Disposable {
     private readonly subscriptions: vscode.Disposable[] = [];
 
     updateTreeItem() {
-        logger.info("Triggered repository tree item update", this.dotgitdir.toString());
+        logger.trace("Triggered repository tree item update", this.dotgitdir.toString());
         updateEvent.fire(`repository:${this.dotgitdir.toString()}`);
     }
 
@@ -102,7 +102,7 @@ export class Repo implements vscode.Disposable {
             "{.,config,HEAD,packed-refs,FETCH_HEAD,worktrees,worktrees/*,worktrees/*/HEAD,refs/**}",
         );
         const watcher = vscode.workspace.createFileSystemWatcher(pattern);
-        logger.info("Now watching", pattern);
+        logger.trace("Now watching", pattern);
         this.subscriptions.push(
             watcher,
             watcher.onDidCreate(async (uri) => await this.handleUpdateWorktreeInfo(uri)),

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { GitExtension, Ref, RefType } from "./git";
 import { BasicWorktreeData, Repo } from "./repo";
-import { refDisplayName, repoName, uriJoinPath, writeFileUTF8 } from "./util";
+import { refDisplayName, repoName, uriJoinPath, viewProgress, writeFileUTF8 } from "./util";
 import { GlobalStateManager } from "./globalState";
 import assert from "assert";
 import { cleanPath, execute } from "./execute";
@@ -78,7 +78,7 @@ const trackedRepos: vscode.Uri[] = [];
  */
 async function trackRepo(dotgitdir: vscode.Uri, context: vscode.ExtensionContext) {
     if (trackedRepos.find((v) => v.toString(true) === dotgitdir.toString(true))) {
-        logger.info("Skipping duplicate");
+        logger.trace("Skipping duplicate of", dotgitdir.toString(true));
         return; // this is already tracked
     }
     trackedRepos.push(dotgitdir);
@@ -175,12 +175,15 @@ export async function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const { error, stderr } = await repo.executeInRepo(
-                git_extension.git.path,
-                "worktree",
-                "add",
-                cleanPath(pickedLocation[0].path),
-                ref.ref,
+            const { error, stderr } = await viewProgress(
+                repo.executeInRepo(
+                    git_extension.git.path,
+                    "worktree",
+                    "add",
+                    cleanPath(pickedLocation[0].path),
+                    ref.ref,
+                ),
+                "Adding worktree",
             );
             if (error) {
                 throw new Error(stderr);
@@ -218,11 +221,14 @@ export async function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                const { error, stderr } = await repo.executeInRepo(
-                    git_extension.git.path,
-                    "worktree",
-                    "remove",
-                    cleanPath(worktreeDir),
+                const { error, stderr } = await viewProgress(
+                    repo.executeInRepo(
+                        git_extension.git.path,
+                        "worktree",
+                        "remove",
+                        cleanPath(worktreeDir),
+                    ),
+                    "Removing worktree",
                 );
                 if (error) {
                     vscode.window.showErrorMessage(stderr);
@@ -291,12 +297,9 @@ export async function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                const { error, stdout, stderr } = await vscode.window.withProgress(
-                    {
-                        location: { viewId: "git-worktrees" },
-                        title: "Running git fetch",
-                    },
-                    async () => await repo.executeInRepo(git_extension.git.path, "fetch"),
+                const { error, stdout, stderr } = await viewProgress(
+                    repo.executeInRepo(git_extension.git.path, "fetch"),
+                    "Running git fetch",
                 );
                 if (error) {
                     vscode.window.showErrorMessage(stderr);
