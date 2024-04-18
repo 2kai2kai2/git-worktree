@@ -175,18 +175,20 @@ export async function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const { error, stderr } = await viewProgress(
-                repo.executeInRepo(
+            const { error, stderr } = await viewProgress(async () => {
+                return await repo.executeInRepo(
                     git_extension.git.path,
                     "worktree",
                     "add",
                     cleanPath(pickedLocation[0].path),
                     ref.ref,
-                ),
-                "Adding worktree",
-            );
+                    ...(ref.type === "remotes"
+                        ? ["--track", "-b", ref.ref.slice(ref.ref.indexOf("/") + 1)]
+                        : []),
+                );
+            }, "Adding worktree");
             if (error) {
-                throw new Error(stderr);
+                vscode.window.showErrorMessage(stderr);
             }
         }),
         vscode.commands.registerCommand(
