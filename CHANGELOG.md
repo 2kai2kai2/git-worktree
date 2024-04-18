@@ -4,6 +4,13 @@ All notable changes to the "git-worktree" extension will be documented in this f
 
 <!--Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.-->
 
+## [0.0.6]
+
+## Added
+
+- Loading indicators while adding and removing worktrees
+- Adding worktrees based on remote branches will now create the worktree with a tracking local branch rather than a detached head (which is the default behavior for git worktree add)
+
 ## [0.0.5]
 
 The extension now works on Windows!
